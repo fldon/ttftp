@@ -2,23 +2,32 @@
 #define TFTPRECEIVER_H
 
 #include <string>
+#include <memory>
 #include <boost/asio.hpp>
 
 /*
  * The end of an established tftp session that receives data (used for client and server)
  * */
-template<typename ExecutionContext>
-class TftpReceiver
+class TftpReceiver: public std::enable_shared_from_this<TftpReceiver>
 {
 public:
-    TftpReceiver(ExecutionContext &executor,std::string filename, std::string mode, boost::asio::ip::address remoteaddress, uint16_t port, std::size_t blocksize);
+    TftpReceiver(boost::asio::ip::udp::socket &&INsocket, const std::string &filename, const std::string &mode, const boost::asio::ip::address &remoteaddress, uint16_t port, std::size_t blocksize = 512);
+    void start();
+private:
+    void sendNextAck();
+    void checkReceivedBlock(boost::system::error_code err, std::size_t sentbytes);
+    void sendErrorMsg(uint16_t errorcode, std::string msg);
+    void handleReadTimeout(boost::system::error_code err);
+
+    std::string filename = "";
+    std::size_t blocksize{0};
+    boost::asio::ip::udp::socket remoteConnSocket;
+    uint16_t lastreceiveddatacount{0};
+    std::vector<char> lastsentack{};
+    std::vector<char> databuffer{};
+
+    boost::asio::deadline_timer readTimeoutTimer;
+    uint16_t timeoutcount{0};
 };
-
-
-template<typename ExecutionContext>
-TftpReceiver<ExecutionContext>::TftpReceiver(ExecutionContext &INexecutor,std::string INfilename, std::string INmode, boost::asio::ip::address INremoteaddress, uint16_t port, std::size_t INblocksize)
-{
-    //TODO
-}
 
 #endif // TFTPRECEIVER_H

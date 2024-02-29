@@ -5,10 +5,6 @@
 #include <memory>
 #include <boost/asio.hpp>
 
-static constexpr uint16_t CONTROLBYTES = 4;
-static constexpr uint16_t RETRANSMISSION_TIME = 2; //in seconds
-static constexpr uint16_t RETRANSMISSIONS_UNTIL_TIMEOUT = 4; //amount of resends before the connection is closed due to timeout
-
 /*
  * The end of an established tftp session that sends data (used for client and server)
  * */

@@ -34,6 +34,7 @@ CppApplication {
 
     files: [
         "main.cpp",
+        "tst_firstackafterstart.cpp",
         "tst_server.cpp",
         "tst_ttftpsender.cpp",
     ]
@@ -44,6 +45,7 @@ CppApplication {
         prefix: projectSourcePath
     files: [
             "tftpclient.cpp",
+            "tftpreceiver.cpp",
             "tftpsender.cpp",
             "tftpserver.cpp",
         ]

@@ -98,7 +98,7 @@ void Tftpsender::checkAckForLastBlock(boost::system::error_code err, std::size_t
 
 void Tftpsender::sendErrorMsg(uint16_t errorcode, std::string msg)
 {
-    ////Error format: 2 bytes opcode: 05; 2 bytes errorCodem string errormessage, 1 byte end of string
+    //Error format: 2 bytes opcode: 05; 2 bytes errorCodem string errormessage, 1 byte end of string
     constexpr uint16_t OPCODELENGTH = 2;
     constexpr uint16_t ERRCODELENGTH = 2;
 
@@ -107,7 +107,7 @@ void Tftpsender::sendErrorMsg(uint16_t errorcode, std::string msg)
 
     *reinterpret_cast<uint16_t*>(messagetosend.data()) = htons(5);
     *reinterpret_cast<uint16_t*>(messagetosend.data() + OPCODELENGTH) = htons(errorcode);
-    std::copy(msg.begin(), msg.end(), messagetosend.begin() + CONTROLBYTES);
+    std::copy(msg.begin(), msg.end(), messagetosend.begin() + OPCODELENGTH + ERRCODELENGTH);
 
     auto self = shared_from_this();
     remoteConnSocket.async_send(boost::asio::buffer(messagetosend, messagetosend.size()), [self] (boost::system::error_code err, std::size_t sentbytes) {});
