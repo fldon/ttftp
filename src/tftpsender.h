@@ -73,8 +73,8 @@ void Tftpsender<ExecutionContext>::sendNextBlock()
     auto readbytes = ifs.gcount();
     if(!sendingdone)
     {
-        *reinterpret_cast<uint16_t*>(lastsentdata.data()) = 3;
-        *reinterpret_cast<uint16_t*>(lastsentdata.data() + CONTROLBYTES / 2) = lastsentdatacount;
+        *reinterpret_cast<uint16_t*>(lastsentdata.data()) = htons(3);
+        *reinterpret_cast<uint16_t*>(lastsentdata.data() + CONTROLBYTES / 2) = htons(lastsentdatacount);
 
         //JUST FOR DEBUG
         std::cout << "Sent Data Block message:" << std::string(lastsentdata.begin(), lastsentdata.begin() + readbytes + CONTROLBYTES) << "\n";
@@ -105,14 +105,14 @@ void Tftpsender<ExecutionContext>::checkAckForLastBlock(boost::system::error_cod
     if(!err && sentbytes == 4) //4 bytes: 2 for opcode ACK, 2 for DATA packet number; anything else would be an error
     {
         //TODO: handle error code: include timeout for read, and differentiate between timeout error (then treat as resend) and actual errors (abort sending)
-        uint16_t opcode = *reinterpret_cast<uint16_t*>(ackbuffer.data());
+        uint16_t opcode = ntohs(*reinterpret_cast<uint16_t*>(ackbuffer.data()));
         if(opcode != static_cast<uint8_t>(TftpOpcodes::ACK))
         {
             sendErrorMsg(4, "Wrong opcode: expected ACK for package" + std::to_string(lastsentdatacount));
         }
         else
         {
-            uint16_t ack_block = *reinterpret_cast<uint16_t*>(ackbuffer.data() + sizeof(uint16_t));
+            uint16_t ack_block = ntohs(*reinterpret_cast<uint16_t*>(ackbuffer.data() + sizeof(uint16_t)));
             if(ack_block < lastsentdatacount)
             {
                 sendNextBlock();
@@ -148,8 +148,8 @@ void Tftpsender<ExecutionContext>::sendErrorMsg(uint16_t errorcode, std::string 
     std::vector<char> messagetosend(OPCODELENGTH + ERRCODELENGTH + msg.size() + 1);
     messagetosend.assign(messagetosend.size(), 0);
 
-    *reinterpret_cast<uint16_t*>(messagetosend.data()) = 5;
-    *reinterpret_cast<uint16_t*>(messagetosend.data() + OPCODELENGTH) = errorcode;
+    *reinterpret_cast<uint16_t*>(messagetosend.data()) = htons(5);
+    *reinterpret_cast<uint16_t*>(messagetosend.data() + OPCODELENGTH) = htons(errorcode);
     std::copy(msg.begin(), msg.end(), messagetosend.begin() + CONTROLBYTES);
 
     remoteConnSocket.async_send(boost::asio::buffer(messagetosend, messagetosend.size()), [this] (boost::system::error_code err, std::size_t sentbytes) {});

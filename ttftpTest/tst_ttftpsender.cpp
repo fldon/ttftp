@@ -47,7 +47,7 @@ TEST(TTFTPSender, FirstBlockAfterStart)
     testRemoteConnSocket.receive_from(boost::asio::buffer(buffer, buffer.size()), localsenderendpoint);
     //(mStrand, filename_to_read, mode, remoteaddress, port, DEFAULT_BLOCKSIZE
     bool equaldata = std::equal(buffer.begin() + CONTROLBYTES, buffer.end(), ofsinput.begin());
-    bool equalControlInfo = *reinterpret_cast<uint16_t*>(buffer.data()) == 3 && *reinterpret_cast<uint16_t*>(buffer.data() + CONTROLBYTES/2) == 1;
+    bool equalControlInfo = ntohs(*reinterpret_cast<uint16_t*>(buffer.data())) == 3 && ntohs(*reinterpret_cast<uint16_t*>(buffer.data() + CONTROLBYTES/2)) == 1;
     EXPECT_EQ(equaldata, true);
     EXPECT_EQ(equalControlInfo, true);
 }
@@ -104,8 +104,8 @@ TEST(TTFTPSender, CorrectAmountofTotalBlocksSent)
             count++;
             std::string ackresponse;
             ackresponse.resize(4);
-            *reinterpret_cast<uint16_t*>(const_cast<char*>(ackresponse.data())) = static_cast<uint16_t>(TftpOpcodes::ACK);
-            *reinterpret_cast<uint16_t*>(const_cast<char*>(ackresponse.data() + 2)) = static_cast<uint16_t>(count);
+            *reinterpret_cast<uint16_t*>(const_cast<char*>(ackresponse.data())) = htons(static_cast<uint16_t>(TftpOpcodes::ACK));
+            *reinterpret_cast<uint16_t*>(const_cast<char*>(ackresponse.data() + 2)) = htons(static_cast<uint16_t>(count));
             testRemoteConnSocket.send_to(boost::asio::buffer(ackresponse, ackresponse.size()), localsenderendpoint);
         }
     }
@@ -164,8 +164,8 @@ TEST(TTFTPSender, CorrectLastBlockSent_FullBlock)
             count++;
             std::string ackresponse;
             ackresponse.resize(4);
-            *reinterpret_cast<uint16_t*>(const_cast<char*>(ackresponse.data())) = static_cast<uint16_t>(TftpOpcodes::ACK);
-            *reinterpret_cast<uint16_t*>(const_cast<char*>(ackresponse.data() + 2)) = static_cast<uint16_t>(count);
+            *reinterpret_cast<uint16_t*>(const_cast<char*>(ackresponse.data())) = htons(static_cast<uint16_t>(TftpOpcodes::ACK));
+            *reinterpret_cast<uint16_t*>(const_cast<char*>(ackresponse.data() + 2)) = htons(static_cast<uint16_t>(count));
             testRemoteConnSocket.send_to(boost::asio::buffer(ackresponse, ackresponse.size()), localsenderendpoint);
             if(count == NUM_OF_BLOCKS)
             {
@@ -180,7 +180,7 @@ TEST(TTFTPSender, CorrectLastBlockSent_FullBlock)
     std::array<char, 512> zeroes{};
     zeroes.fill(0);
     bool equaldata = std::equal(zeroes.begin(), zeroes.end(), buffer.begin() + CONTROLBYTES);
-    bool equalControlInfo = *reinterpret_cast<uint16_t*>(buffer.data()) == 3 && *reinterpret_cast<uint16_t*>(buffer.data() + CONTROLBYTES/2) == count;
+    bool equalControlInfo = ntohs(*reinterpret_cast<uint16_t*>(buffer.data())) == 3 && ntohs(*reinterpret_cast<uint16_t*>(buffer.data() + CONTROLBYTES/2)) == count;
     EXPECT_EQ(equaldata, true);
     EXPECT_EQ(equalControlInfo, true);
 
@@ -238,8 +238,8 @@ TEST(TTFTPSender, CorrectLastBlockSent_HalfBlock)
             count++;
             std::string ackresponse;
             ackresponse.resize(4);
-            *reinterpret_cast<uint16_t*>(const_cast<char*>(ackresponse.data())) = static_cast<uint16_t>(TftpOpcodes::ACK);
-            *reinterpret_cast<uint16_t*>(const_cast<char*>(ackresponse.data() + 2)) = static_cast<uint16_t>(count);
+            *reinterpret_cast<uint16_t*>(const_cast<char*>(ackresponse.data())) = htons(static_cast<uint16_t>(TftpOpcodes::ACK));
+            *reinterpret_cast<uint16_t*>(const_cast<char*>(ackresponse.data() + 2)) = htons(static_cast<uint16_t>(count));
             testRemoteConnSocket.send_to(boost::asio::buffer(ackresponse, ackresponse.size()), localsenderendpoint);
             if(count == NUM_OF_BLOCKS)
             {
@@ -250,7 +250,7 @@ TEST(TTFTPSender, CorrectLastBlockSent_HalfBlock)
     t.join();
 
     bool equaldata = std::equal(ofsinput.begin() + (512 * NUM_OF_BLOCKS), ofsinput.end(), buffer.begin() + CONTROLBYTES);
-    bool equalControlInfo = *reinterpret_cast<uint16_t*>(buffer.data()) == 3 && *reinterpret_cast<uint16_t*>(buffer.data() + CONTROLBYTES/2) == count;
+    bool equalControlInfo = ntohs(*reinterpret_cast<uint16_t*>(buffer.data())) == 3 && ntohs(*reinterpret_cast<uint16_t*>(buffer.data() + CONTROLBYTES/2)) == count;
     EXPECT_EQ(equaldata, true);
     EXPECT_EQ(equalControlInfo, true);
     EXPECT_EQ(count,  NUM_OF_BLOCKS + 1); //Expect last "data" block to be empty
@@ -308,13 +308,13 @@ TEST(TTFTPSender, CompleteFileSentCorrectlyHalfBlock)
             count++;
             std::string ackresponse;
             ackresponse.resize(4);
-            *reinterpret_cast<uint16_t*>(const_cast<char*>(ackresponse.data())) = static_cast<uint16_t>(TftpOpcodes::ACK);
-            *reinterpret_cast<uint16_t*>(const_cast<char*>(ackresponse.data() + 2)) = static_cast<uint16_t>(count);
+            *reinterpret_cast<uint16_t*>(const_cast<char*>(ackresponse.data())) = htons(static_cast<uint16_t>(TftpOpcodes::ACK));
+            *reinterpret_cast<uint16_t*>(const_cast<char*>(ackresponse.data() + 2)) = htons(static_cast<uint16_t>(count));
             testRemoteConnSocket.send_to(boost::asio::buffer(ackresponse, ackresponse.size()), localsenderendpoint);
 
             //test if this current buffer is correct
             bool equaldata = std::equal(ofsinput.begin() + (512 * (count - 1) ), ofsinput.end() - (512 * (NUM_OF_BLOCKS - (count - 1) ) ), buffer.begin() + CONTROLBYTES);
-            bool equalControlInfo = *reinterpret_cast<uint16_t*>(buffer.data()) == 3 && *reinterpret_cast<uint16_t*>(buffer.data() + CONTROLBYTES/2) == count;
+            bool equalControlInfo = ntohs(*reinterpret_cast<uint16_t*>(buffer.data())) == 3 && ntohs(*reinterpret_cast<uint16_t*>(buffer.data() + CONTROLBYTES/2)) == count;
             EXPECT_EQ(equalControlInfo, true);
             EXPECT_EQ(equaldata, true);
             if(count == NUM_OF_BLOCKS)
@@ -379,13 +379,13 @@ TEST(TTFTPSender, CompleteFileSentCorrectlyFullBlock)
             count++;
             std::string ackresponse;
             ackresponse.resize(4);
-            *reinterpret_cast<uint16_t*>(const_cast<char*>(ackresponse.data())) = static_cast<uint16_t>(TftpOpcodes::ACK);
-            *reinterpret_cast<uint16_t*>(const_cast<char*>(ackresponse.data() + 2)) = static_cast<uint16_t>(count);
+            *reinterpret_cast<uint16_t*>(const_cast<char*>(ackresponse.data())) = htons(static_cast<uint16_t>(TftpOpcodes::ACK));
+            *reinterpret_cast<uint16_t*>(const_cast<char*>(ackresponse.data() + 2)) = htons(static_cast<uint16_t>(count));
             testRemoteConnSocket.send_to(boost::asio::buffer(ackresponse, ackresponse.size()), localsenderendpoint);
 
             //test if this current buffer is correct
             bool equaldata = std::equal(ofsinput.begin() + (512 * (count - 1) ), ofsinput.end() - (512 * (NUM_OF_BLOCKS - (count - 1) ) ), buffer.begin() + CONTROLBYTES);
-            bool equalControlInfo = *reinterpret_cast<uint16_t*>(buffer.data()) == 3 && *reinterpret_cast<uint16_t*>(buffer.data() + CONTROLBYTES/2) == count;
+            bool equalControlInfo = ntohs(*reinterpret_cast<uint16_t*>(buffer.data())) == 3 && ntohs(*reinterpret_cast<uint16_t*>(buffer.data() + CONTROLBYTES/2)) == count;
             EXPECT_EQ(equalControlInfo, true);
             EXPECT_EQ(equaldata, true);
             if(count == NUM_OF_BLOCKS)
@@ -448,7 +448,7 @@ TEST(TTFTPSender, ResendWhenNoACK)
         {
             //test if this current buffer is correct
             bool equaldata = std::equal(ofsinput.begin() + (512 * (count - 1) ), ofsinput.end() - (512 * (NUM_OF_BLOCKS - (count - 1) ) ), buffer.begin() + CONTROLBYTES);
-            bool equalControlInfo = *reinterpret_cast<uint16_t*>(buffer.data()) == 3 && *reinterpret_cast<uint16_t*>(buffer.data() + CONTROLBYTES/2) == count;
+            bool equalControlInfo = ntohs(*reinterpret_cast<uint16_t*>(buffer.data())) == 3 && ntohs(*reinterpret_cast<uint16_t*>(buffer.data() + CONTROLBYTES/2)) == count;
             EXPECT_EQ(equalControlInfo, true);
             EXPECT_EQ(equaldata, true);
             if(count == NUM_OF_BLOCKS)
@@ -517,8 +517,8 @@ TEST(TTFTPSender, ConnectioncloseAfterMultipleTimeouts)
             //TODO: In case of sender timeout due to no ACK, the buffer should instead contain the appropiate error message!
             std::array<char, 512> expectedError;
             expectedError.fill(0);
-            *reinterpret_cast<uint16_t*>(expectedError.data()) = 5;
-            *reinterpret_cast<uint16_t*>(expectedError.data() + 2) = 4;
+            *reinterpret_cast<uint16_t*>(expectedError.data()) = htons(5);
+            *reinterpret_cast<uint16_t*>(expectedError.data() + 2) = htons(4);
             std::string errormessage = "Timeout while waiting for ACK for Data Packet " + std::to_string(count);
             std::copy(errormessage.begin(), errormessage.end(), expectedError.data() + CONTROLBYTES);
 
@@ -591,13 +591,13 @@ TEST(TTFTPSender, ResendWhenSmallerACK)
             resendcount++;
             std::string ackresponse;
             ackresponse.resize(4);
-            *reinterpret_cast<uint16_t*>(const_cast<char*>(ackresponse.data())) = static_cast<uint16_t>(TftpOpcodes::ACK);
-            *reinterpret_cast<uint16_t*>(const_cast<char*>(ackresponse.data() + 2)) = static_cast<uint16_t>(0);
+            *reinterpret_cast<uint16_t*>(const_cast<char*>(ackresponse.data())) = htons(static_cast<uint16_t>(TftpOpcodes::ACK));
+            *reinterpret_cast<uint16_t*>(const_cast<char*>(ackresponse.data() + 2)) = htons(static_cast<uint16_t>(0));
             testRemoteConnSocket.send_to(boost::asio::buffer(ackresponse, ackresponse.size()), localsenderendpoint);
 
             //test if this current buffer is correct
             bool equaldata = std::equal(ofsinput.begin() + (512 * (count - 1) ), ofsinput.end() - (512 * (NUM_OF_BLOCKS - (count - 1) ) ), buffer.begin() + CONTROLBYTES);
-            bool equalControlInfo = *reinterpret_cast<uint16_t*>(buffer.data()) == 3 && *reinterpret_cast<uint16_t*>(buffer.data() + CONTROLBYTES/2) == count;
+            bool equalControlInfo = ntohs(*reinterpret_cast<uint16_t*>(buffer.data())) == 3 && ntohs(*reinterpret_cast<uint16_t*>(buffer.data() + CONTROLBYTES/2)) == count;
             EXPECT_EQ(equalControlInfo, true);
             EXPECT_EQ(equaldata, true);
             if(count == NUM_OF_BLOCKS)
@@ -671,8 +671,8 @@ TEST(TTFTPSender, ErrorWhenLargerACK)
             {
                 std::string ackresponse;
                 ackresponse.resize(4);
-                *reinterpret_cast<uint16_t*>(const_cast<char*>(ackresponse.data())) = static_cast<uint16_t>(TftpOpcodes::ACK);
-                *reinterpret_cast<uint16_t*>(const_cast<char*>(ackresponse.data() + 2)) = static_cast<uint16_t>(5);
+                *reinterpret_cast<uint16_t*>(const_cast<char*>(ackresponse.data())) = htons(static_cast<uint16_t>(TftpOpcodes::ACK));
+                *reinterpret_cast<uint16_t*>(const_cast<char*>(ackresponse.data() + 2)) = htons(static_cast<uint16_t>(5));
                 testRemoteConnSocket.send_to(boost::asio::buffer(ackresponse, ackresponse.size()), localsenderendpoint);
             }
 
@@ -680,8 +680,8 @@ TEST(TTFTPSender, ErrorWhenLargerACK)
             //test if this current buffer is correct and is equal to the expected error
             std::array<char, 512> expectedError;
             expectedError.fill(0);
-            *reinterpret_cast<uint16_t*>(expectedError.data()) = 5;
-            *reinterpret_cast<uint16_t*>(expectedError.data() + 2) = 4;
+            *reinterpret_cast<uint16_t*>(expectedError.data()) = htons(5);
+            *reinterpret_cast<uint16_t*>(expectedError.data() + 2) = htons(4);
             std::string errormessage = "ACK for package that was not yet sent: expected " + std::to_string(count) + ", got " + std::to_string(5);
             std::copy(errormessage.begin(), errormessage.end(), expectedError.data() + CONTROLBYTES);
 
