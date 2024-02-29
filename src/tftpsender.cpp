@@ -3,13 +3,14 @@
 #include <fstream>
 #include <iostream>
 
-//TODO: Handle timeouts: both a timeout for a single retransmission, and a timeout for closing the connections (lets just say 4 retransmissions in a row)
-//TODO: handle lifetime with shared_from_this bullshittery
-//TODO: don't explicitly use Executioncontext to initialize socket; instead, get socket from outside in constructor
 Tftpsender::Tftpsender(boost::asio::ip::udp::socket &&INsocket, const std::string &INfilename, const std::string &INmode, const boost::asio::ip::address &INremoteaddress, uint16_t port, std::size_t INblocksize)
     :filename(INfilename), blocksize(INblocksize), remoteConnSocket(std::move(INsocket)), lastsentdata(blocksize + CONTROLBYTES), ackbuffer(blocksize), readTimeoutTimer(remoteConnSocket.get_executor())
 {
     remoteConnSocket.connect(boost::asio::ip::udp::endpoint(INremoteaddress, port));
+}
+
+void Tftpsender::start()
+{
     std::ifstream ifs(filename);
     if(!ifs)
     {
@@ -41,23 +42,17 @@ void Tftpsender::sendNextBlock()
         //JUST FOR DEBUG
         std::cout << "Sent Data Block message:" << std::string(lastsentdata.begin(), lastsentdata.begin() + readbytes + CONTROLBYTES) << "\n";
 
-        remoteConnSocket.async_send(boost::asio::buffer(lastsentdata, readbytes + CONTROLBYTES), [this](boost::system::error_code err, std::size_t sentbytes)
+        auto self = shared_from_this();
+        remoteConnSocket.async_send(boost::asio::buffer(lastsentdata, readbytes + CONTROLBYTES), [self](boost::system::error_code err, std::size_t sentbytes)
                                     {
-                                        readTimeoutTimer.expires_from_now(boost::posix_time::seconds(RETRANSMISSION_TIME));
-                                        readTimeoutTimer.async_wait(std::bind(&Tftpsender::handleReadTimeout, this, boost::asio::placeholders::error));
-                                        remoteConnSocket.async_receive(boost::asio::buffer(ackbuffer, blocksize), std::bind(&Tftpsender::checkAckForLastBlock, this, boost::asio::placeholders::error, boost::asio::placeholders::bytes_transferred));
+                                        self->readTimeoutTimer.expires_from_now(boost::posix_time::seconds(RETRANSMISSION_TIME));
+                                        self->readTimeoutTimer.async_wait(std::bind(&Tftpsender::handleReadTimeout, self, boost::asio::placeholders::error));
+                                        self->remoteConnSocket.async_receive(boost::asio::buffer(self->ackbuffer, self->blocksize), std::bind(&Tftpsender::checkAckForLastBlock, self, boost::asio::placeholders::error, boost::asio::placeholders::bytes_transferred));
                                     });
         if(readbytes < blocksize)
         {
             sendingdone = true;
         }
-    }
-    else
-    {
-        //Only for temporary testing: should be handled via shared_from_this lifetime handling of the whole sender
-        //delete this;
-        remoteConnSocket.shutdown(boost::asio::ip::udp::socket::shutdown_both);
-        remoteConnSocket.close();
     }
 }
 
@@ -66,7 +61,7 @@ void Tftpsender::checkAckForLastBlock(boost::system::error_code err, std::size_t
     readTimeoutTimer.cancel();
     if(!err && sentbytes == 4) //4 bytes: 2 for opcode ACK, 2 for DATA packet number; anything else would be an error
     {
-        //TODO: handle error code: include timeout for read, and differentiate between timeout error (then treat as resend) and actual errors (abort sending)
+        //handle error code: include timeout for read, and differentiate between timeout error (then treat as resend) and actual errors (abort sending)
         uint16_t opcode = ntohs(*reinterpret_cast<uint16_t*>(ackbuffer.data()));
         if(opcode != static_cast<uint8_t>(TftpOpcodes::ACK))
         {
@@ -97,7 +92,7 @@ void Tftpsender::checkAckForLastBlock(boost::system::error_code err, std::size_t
     }
     else
     {
-        //TODO unfixable error; close connection without sending further error message
+        //unfixable error; close connection without sending further error message
     }
 }
 
@@ -114,7 +109,8 @@ void Tftpsender::sendErrorMsg(uint16_t errorcode, std::string msg)
     *reinterpret_cast<uint16_t*>(messagetosend.data() + OPCODELENGTH) = htons(errorcode);
     std::copy(msg.begin(), msg.end(), messagetosend.begin() + CONTROLBYTES);
 
-    remoteConnSocket.async_send(boost::asio::buffer(messagetosend, messagetosend.size()), [this] (boost::system::error_code err, std::size_t sentbytes) {});
+    auto self = shared_from_this();
+    remoteConnSocket.async_send(boost::asio::buffer(messagetosend, messagetosend.size()), [self] (boost::system::error_code err, std::size_t sentbytes) {});
 }
 
 
@@ -132,13 +128,6 @@ void Tftpsender::handleReadTimeout(boost::system::error_code err)
         else
         {
             sendErrorMsg(4, "Timeout while waiting for ACK for Data Packet " + std::to_string(lastsentdatacount));
-            //Only for temporary testing: should be handled via shared_from_this lifetime handling of the whole sender
-            //remoteConnSocket.shutdown(boost::asio::ip::udp::socket::shutdown_both);
-            //remoteConnSocket.close();
         }
-    }
-    else
-    {
-        std::string test = err.what();
     }
 }

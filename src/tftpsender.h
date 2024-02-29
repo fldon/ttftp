@@ -2,6 +2,7 @@
 #define TFTPSENDER_H
 
 #include <string>
+#include <memory>
 #include <boost/asio.hpp>
 
 static constexpr uint16_t CONTROLBYTES = 4;
@@ -11,10 +12,11 @@ static constexpr uint16_t RETRANSMISSIONS_UNTIL_TIMEOUT = 4; //amount of resends
 /*
  * The end of an established tftp session that sends data (used for client and server)
  * */
-class Tftpsender
+class Tftpsender : public std::enable_shared_from_this<Tftpsender>
 {
 public:
     Tftpsender(boost::asio::ip::udp::socket &&INsocket, const std::string &filename, const std::string &mode, const boost::asio::ip::address &remoteaddress, uint16_t port, std::size_t blocksize = 512);
+    void start();
 private:
     void sendNextBlock();
     void checkAckForLastBlock(boost::system::error_code err, std::size_t sentbytes);
