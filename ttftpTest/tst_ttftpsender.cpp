@@ -4,6 +4,10 @@
 
 #include "tftpsender.h"
 
+#include "Tftphelpsefs.h"
+#include <fstream>
+#include <iostream>
+
 using namespace std::chrono_literals;
 
 using namespace testing;
@@ -39,7 +43,8 @@ TEST(TTFTPSender, FirstBlockAfterStart)
 
     std::string testmode = "octet";
 
-    Tftpsender<boost::asio::io_context> testSender(testIoContext, testfilenametoread, testmode, testRemoteEndpoint.address(), testport);
+    boost::asio::ip::udp::socket newsock(testIoContext);
+    Tftpsender testSender(std::move(newsock), testfilenametoread, testmode, testRemoteEndpoint.address(), testport);
 
     std::array<char, 512> buffer;
     buffer.fill(0);
@@ -77,7 +82,8 @@ TEST(TTFTPSender, CorrectAmountofTotalBlocksSent)
     }
 
     std::string testmode = "octet";
-    Tftpsender<boost::asio::io_context> testSender(testIoContext, testfilenametoread, testmode, testRemoteEndpoint.address(), testport);
+    boost::asio::ip::udp::socket newsock(testIoContext);
+    Tftpsender testSender(std::move(newsock), testfilenametoread, testmode, testRemoteEndpoint.address(), testport);
 
     std::thread t([&testIoContext] () {testIoContext.run();});
 
@@ -140,7 +146,8 @@ TEST(TTFTPSender, CorrectLastBlockSent_FullBlock)
 
     std::string testmode = "octet";
 
-    Tftpsender<boost::asio::io_context> testSender(testIoContext, testfilenametoread, testmode, testRemoteEndpoint.address(), testport);
+    boost::asio::ip::udp::socket newsock(testIoContext);
+    Tftpsender testSender(std::move(newsock), testfilenametoread, testmode, testRemoteEndpoint.address(), testport);
     std::thread t([&testIoContext] () {testIoContext.run();});
 
     std::array<char, 512> buffer;
@@ -213,7 +220,8 @@ TEST(TTFTPSender, CorrectLastBlockSent_HalfBlock)
 
     std::string testmode = "octet";
 
-    Tftpsender<boost::asio::io_context> testSender(testIoContext, testfilenametoread, testmode, testRemoteEndpoint.address(), testport);
+    boost::asio::ip::udp::socket newsock(testIoContext);
+    Tftpsender testSender(std::move(newsock), testfilenametoread, testmode, testRemoteEndpoint.address(), testport);
     std::thread t([&testIoContext] () {testIoContext.run();});
 
     std::array<char, 512> buffer;
@@ -283,7 +291,8 @@ TEST(TTFTPSender, CompleteFileSentCorrectlyHalfBlock)
 
     std::string testmode = "octet";
 
-    Tftpsender<boost::asio::io_context> testSender(testIoContext, testfilenametoread, testmode, testRemoteEndpoint.address(), testport);
+    boost::asio::ip::udp::socket newsock(testIoContext);
+    Tftpsender testSender(std::move(newsock), testfilenametoread, testmode, testRemoteEndpoint.address(), testport);
     std::thread t([&testIoContext] () {testIoContext.run();});
 
     std::array<char, 512> buffer;
@@ -354,7 +363,8 @@ TEST(TTFTPSender, CompleteFileSentCorrectlyFullBlock)
 
     std::string testmode = "octet";
 
-    Tftpsender<boost::asio::io_context> testSender(testIoContext, testfilenametoread, testmode, testRemoteEndpoint.address(), testport);
+    boost::asio::ip::udp::socket newsock(testIoContext);
+    Tftpsender testSender(std::move(newsock), testfilenametoread, testmode, testRemoteEndpoint.address(), testport);
     std::thread t([&testIoContext] () {testIoContext.run();});
 
     std::array<char, 512> buffer;
@@ -425,7 +435,8 @@ TEST(TTFTPSender, ResendWhenNoACK)
 
     std::string testmode = "octet";
 
-    Tftpsender<boost::asio::io_context> testSender(testIoContext, testfilenametoread, testmode, testRemoteEndpoint.address(), testport);
+    boost::asio::ip::udp::socket newsock(testIoContext);
+    Tftpsender testSender(std::move(newsock), testfilenametoread, testmode, testRemoteEndpoint.address(), testport);
     std::thread t([&testIoContext] () {testIoContext.run();});
 
     std::array<char, 512> buffer;
@@ -489,7 +500,8 @@ TEST(TTFTPSender, ConnectioncloseAfterMultipleTimeouts)
 
     std::string testmode = "octet";
 
-    Tftpsender<boost::asio::io_context> testSender(testIoContext, testfilenametoread, testmode, testRemoteEndpoint.address(), testport);
+    boost::asio::ip::udp::socket newsock(testIoContext);
+    Tftpsender testSender(std::move(newsock), testfilenametoread, testmode, testRemoteEndpoint.address(), testport);
     std::thread t([&testIoContext] () {testIoContext.run();});
 
     std::array<char, 512> buffer;
@@ -565,7 +577,8 @@ TEST(TTFTPSender, ResendWhenSmallerACK)
 
     std::string testmode = "octet";
 
-    Tftpsender<boost::asio::io_context> testSender(testIoContext, testfilenametoread, testmode, testRemoteEndpoint.address(), testport);
+    boost::asio::ip::udp::socket newsock(testIoContext);
+    Tftpsender testSender(std::move(newsock), testfilenametoread, testmode, testRemoteEndpoint.address(), testport);
     std::thread t([&testIoContext] () {testIoContext.run();});
 
     std::array<char, 512> buffer;
@@ -641,7 +654,8 @@ TEST(TTFTPSender, ErrorWhenLargerACK)
 
     std::string testmode = "octet";
 
-    Tftpsender<boost::asio::io_context> testSender(testIoContext, testfilenametoread, testmode, testRemoteEndpoint.address(), testport);
+    boost::asio::ip::udp::socket newsock(testIoContext);
+    Tftpsender testSender(std::move(newsock), testfilenametoread, testmode, testRemoteEndpoint.address(), testport);
     std::thread t([&testIoContext] () {testIoContext.run();});
 
     std::array<char, 512> buffer;

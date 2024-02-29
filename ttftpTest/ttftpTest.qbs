@@ -38,5 +38,15 @@ CppApplication {
         "tst_ttftpsender.cpp",
     ]
 
+    Group
+    {
+        name: "Sourcefiles"
+        prefix: projectSourcePath
+    files: [
+            "tftpclient.cpp",
+            "tftpsender.cpp",
+            "tftpserver.cpp",
+        ]
+    }
 
 }

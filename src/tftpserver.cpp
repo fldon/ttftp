@@ -30,7 +30,7 @@ TftpServer::TftpServer(std::string INrootfolder)
     :   mIoContext(),
         mStrand(boost::asio::make_strand(mIoContext)),
         mAccSocket(mStrand, boost::asio::ip::udp::endpoint(boost::asio::ip::udp::v4(), 69)),
-        rootfolder(rootfolder)
+        rootfolder(INrootfolder)
 {
     buffer.fill(0);
     mAccSocket.async_receive_from(boost::asio::buffer(buffer, BUFSIZE), currAccEndpoint, std::bind(&TftpServer::HandleRequest, this, boost::asio::placeholders::error, boost::asio::placeholders::bytes_transferred));
@@ -68,7 +68,8 @@ void TftpServer::HandleSubRequest_RRQ()
     uint16_t port = currAccEndpoint.port();
     boost::asio::ip::address remoteaddress = currAccEndpoint.address();
 
-    Tftpsender sender(mStrand, filename_to_read, mode, remoteaddress, port, DEFAULT_BLOCKSIZE);
+    boost::asio::ip::udp::socket newsock(mStrand);
+    Tftpsender sender(std::move(newsock), filename_to_read, mode, remoteaddress, port, DEFAULT_BLOCKSIZE);
 }
 
 void TftpServer::HandleSubRequest_WRQ()
@@ -79,7 +80,7 @@ void TftpServer::HandleSubRequest_WRQ()
     uint16_t port = currAccEndpoint.port();
     boost::asio::ip::address remoteaddress = currAccEndpoint.address();
 
-    TftpReceiver receiver(mStrand, filename_to_write, mode, remoteaddress, port, DEFAULT_BLOCKSIZE);
+    //TftpReceiver receiver(mStrand, filename_to_write, mode, remoteaddress, port, DEFAULT_BLOCKSIZE);
 }
 
 void TftpServer::sendErrorMsg(uint16_t errorcode, std::string msg)

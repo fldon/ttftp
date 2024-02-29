@@ -15,6 +15,7 @@ CppApplication {
             "tftpclient.cpp",
             "tftpclient.h",
             "tftpreceiver.h",
+            "tftpsender.cpp",
             "tftpsender.h",
             "tftpserver.cpp",
             "tftpserver.h",
