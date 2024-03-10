@@ -14,10 +14,12 @@ public:
     TftpReceiver(boost::asio::ip::udp::socket &&INsocket, const std::string &filename, const std::string &mode, const boost::asio::ip::address &remoteaddress, uint16_t port, std::size_t blocksize = 512);
     void start();
 private:
-    void sendNextAck();
-    void checkReceivedBlock(boost::system::error_code err, std::size_t sentbytes);
+    void sendNextAck(bool lastAck = false);
+    void checkReceivedBlock(boost::system::error_code err, std::size_t sentbytes, std::shared_ptr<TftpReceiver> self);
     void sendErrorMsg(uint16_t errorcode, std::string msg);
     void handleReadTimeout(boost::system::error_code err);
+
+    void startNextReceive(boost::system::error_code err, std::size_t sentbytes, std::shared_ptr<TftpReceiver> self);
 
     std::string filename = "";
     std::size_t blocksize{0};

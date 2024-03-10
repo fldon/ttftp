@@ -22,7 +22,7 @@ void TftpReceiver::start()
 }
 
 
-void TftpReceiver::checkReceivedBlock(boost::system::error_code err, std::size_t sentbytes)
+void TftpReceiver::checkReceivedBlock(boost::system::error_code err, std::size_t sentbytes, std::shared_ptr<TftpReceiver> self)
 {
     readTimeoutTimer.cancel();
     if(!err)
@@ -63,6 +63,10 @@ void TftpReceiver::checkReceivedBlock(boost::system::error_code err, std::size_t
                     if(sentbytes == blocksize + CONTROLBYTES)
                     {
                         sendNextAck();
+                    }
+                    else
+                    {
+                        sendNextAck(true);
                     }
                 }
                 else if(dataCount > lastreceiveddatacount + 1)
@@ -117,17 +121,23 @@ void TftpReceiver::sendErrorMsg(uint16_t errorcode, std::string msg)
     remoteConnSocket.async_send(boost::asio::buffer(messagetosend, messagetosend.size()), [self] (boost::system::error_code err, std::size_t sentbytes) {});
 }
 
-void TftpReceiver::sendNextAck()
+void TftpReceiver::sendNextAck(bool lastAck)
 {
     *reinterpret_cast<uint16_t*>(lastsentack.data()) = htons(static_cast<short>(TftpOpcodes::ACK));
     *reinterpret_cast<uint16_t*>(lastsentack.data() + OPCODELENGTH) = htons(lastreceiveddatacount);
 
     auto self = shared_from_this();
     databuffer.assign(databuffer.size(), 0);
-    remoteConnSocket.async_send(boost::asio::buffer(lastsentack, OPCODELENGTH + ERRCODELENGTH), [self](boost::system::error_code err, std::size_t sentbytes)
-                                {
-                                    self->readTimeoutTimer.expires_from_now(boost::posix_time::seconds(RETRANSMISSION_TIME));
-                                    self->readTimeoutTimer.async_wait(std::bind(&TftpReceiver::handleReadTimeout, self, boost::asio::placeholders::error));
-                                    self->remoteConnSocket.async_receive(boost::asio::buffer(self->databuffer, self->blocksize), std::bind(&TftpReceiver::checkReceivedBlock, self, boost::asio::placeholders::error, boost::asio::placeholders::bytes_transferred));
-                                });
+    if(!lastAck)
+        remoteConnSocket.async_send(boost::asio::buffer(lastsentack, OPCODELENGTH + ERRCODELENGTH), std::bind(&TftpReceiver::startNextReceive, this, boost::asio::placeholders::error, boost::asio::placeholders::bytes_transferred, self));
+
+    else
+        remoteConnSocket.send(boost::asio::buffer(lastsentack, OPCODELENGTH + ERRCODELENGTH));
+}
+
+void TftpReceiver::startNextReceive(boost::system::error_code err, std::size_t sentbytes, std::shared_ptr<TftpReceiver> self)
+{
+    readTimeoutTimer.expires_from_now(boost::posix_time::seconds(RETRANSMISSION_TIME));
+    readTimeoutTimer.async_wait(std::bind(&TftpReceiver::handleReadTimeout, self, boost::asio::placeholders::error));
+    remoteConnSocket.async_receive(boost::asio::buffer(databuffer, databuffer.size()), std::bind(&TftpReceiver::checkReceivedBlock, this, boost::asio::placeholders::error, boost::asio::placeholders::bytes_transferred, self));
 }

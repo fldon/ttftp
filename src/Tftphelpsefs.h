@@ -3,7 +3,7 @@
 
 #include <cstdint>
 
-enum class TftpOpcodes {RRQ, WRQ, DATA, ACK, ERROR};
+enum class TftpOpcodes {RRQ=1, WRQ, DATA, ACK, ERROR};
 
 static constexpr uint16_t CONTROLBYTES = 4;
 constexpr uint16_t OPCODELENGTH = 2;
