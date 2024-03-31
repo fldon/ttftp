@@ -3,8 +3,8 @@
 #include <fstream>
 #include <iostream>
 
-Tftpsender::Tftpsender(boost::asio::ip::udp::socket &&INsocket, const std::string &INfilename, const std::string &INmode, const boost::asio::ip::address &INremoteaddress, uint16_t port, std::size_t INblocksize)
-    :filename(INfilename), blocksize(INblocksize), remoteConnSocket(std::move(INsocket)), lastsentdata(blocksize + CONTROLBYTES), ackbuffer(blocksize), readTimeoutTimer(remoteConnSocket.get_executor())
+Tftpsender::Tftpsender(boost::asio::ip::udp::socket &&INsocket, const std::string &INfilename, const std::string &INmode, const boost::asio::ip::address &INremoteaddress, uint16_t port, std::function<void(std::shared_ptr<Tftpsender>)> OperationDoneCallback, std::size_t INblocksize)
+    :filename(INfilename), blocksize(INblocksize), remoteConnSocket(std::move(INsocket)), lastsentdata(blocksize + CONTROLBYTES), ackbuffer(blocksize), readTimeoutTimer(remoteConnSocket.get_executor()), mOperationDoneCallback(OperationDoneCallback)
 {
     remoteConnSocket.connect(boost::asio::ip::udp::endpoint(INremoteaddress, port));
 }
@@ -15,6 +15,7 @@ void Tftpsender::start()
     if(!ifs)
     {
         sendErrorMsg(1, "Requested file not found");
+        endOperation();
     }
     else
     {
@@ -66,6 +67,7 @@ void Tftpsender::checkAckForLastBlock(boost::system::error_code err, std::size_t
         if(opcode != static_cast<uint8_t>(TftpOpcodes::ACK))
         {
             sendErrorMsg(4, "Wrong opcode: expected ACK for package" + std::to_string(lastsentdatacount));
+            endOperation();
         }
         else
         {
@@ -83,16 +85,19 @@ void Tftpsender::checkAckForLastBlock(boost::system::error_code err, std::size_t
             else if(ack_block > lastsentdatacount)
             {
                 sendErrorMsg(4, "ACK for package that was not yet sent: expected " + std::to_string(lastsentdatacount) + ", got " + std::to_string(ack_block));
+                endOperation();
             }
         }
     }
-    else if(err == boost::asio::error::timed_out)
+    //Read operation momentarily cancelled by timer
+    else if(err == boost::asio::error::operation_aborted)
     {
         sendNextBlock();
     }
     else
     {
         //unfixable error; close connection without sending further error message
+        endOperation();
     }
 }
 
@@ -123,11 +128,21 @@ void Tftpsender::handleReadTimeout(boost::system::error_code err)
         timeoutcount++;
         if(timeoutcount <= RETRANSMISSIONS_UNTIL_TIMEOUT)
         {
-            sendNextBlock();
+            //sendNextAck(); //is already done in checkReceivedBlock in case of timer cancel
         }
         else
         {
             sendErrorMsg(4, "Timeout while waiting for ACK for Data Packet " + std::to_string(lastsentdatacount));
+            endOperation();
         }
     }
+}
+
+/*!
+ * \brief Call the constructor-provided callback when the operation ends (due to error or regular end of transfer)
+ */
+void Tftpsender::endOperation()
+{
+    remoteConnSocket.close();
+    mOperationDoneCallback(shared_from_this());
 }

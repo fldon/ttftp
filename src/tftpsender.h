@@ -11,13 +11,15 @@
 class Tftpsender : public std::enable_shared_from_this<Tftpsender>
 {
 public:
-    Tftpsender(boost::asio::ip::udp::socket &&INsocket, const std::string &filename, const std::string &mode, const boost::asio::ip::address &remoteaddress, uint16_t port, std::size_t blocksize = 512);
+    Tftpsender(boost::asio::ip::udp::socket &&INsocket, const std::string &filename, const std::string &mode, const boost::asio::ip::address &remoteaddress, uint16_t port, std::function<void(std::shared_ptr<Tftpsender>)> OperationDoneCallback, std::size_t blocksize = 512);
     void start();
 private:
     void sendNextBlock();
     void checkAckForLastBlock(boost::system::error_code err, std::size_t sentbytes);
     void sendErrorMsg(uint16_t errorcode, std::string msg);
     void handleReadTimeout(boost::system::error_code err);
+
+    void endOperation();
 
     std::string filename = "";
     std::size_t blocksize{0};
@@ -30,6 +32,8 @@ private:
 
     boost::asio::deadline_timer readTimeoutTimer;
     uint16_t timeoutcount{0};
+
+    std::function<void(std::shared_ptr<Tftpsender>)> mOperationDoneCallback;
 };
 
 #endif // TFTPSENDER_H

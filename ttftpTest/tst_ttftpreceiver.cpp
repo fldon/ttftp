@@ -12,6 +12,8 @@ using namespace testing;
 
 static constexpr unsigned int NUM_OF_BLOCKS = 5;
 
+static std::function<void(std::shared_ptr<TftpReceiver>)> dummyCallback = [] (std::shared_ptr<TftpReceiver>) {};
+
 //Test if the first Ack after connection establishment is ACK # 0
 TEST(TTFTPreceiver, firstAckAfterStart)
 {
@@ -32,7 +34,7 @@ TEST(TTFTPreceiver, firstAckAfterStart)
     std::string testmode = "octet";
 
     boost::asio::ip::udp::socket newsock(testIoContext);
-    std::shared_ptr<TftpReceiver> testReceiver = std::make_shared<TftpReceiver>(std::move(newsock), testfilenametowrite, testmode, testRemoteEndpoint.address(), testport);
+    std::shared_ptr<TftpReceiver> testReceiver = std::make_shared<TftpReceiver>(std::move(newsock), testfilenametowrite, testmode, testRemoteEndpoint.address(), testport, dummyCallback);
     testReceiver->start();
 
 
@@ -72,7 +74,7 @@ TEST(TTFTPreceiver, lastblockAckHalfFilled)
     std::string testmode = "octet";
 
     boost::asio::ip::udp::socket newsock(testIoContext);
-    std::shared_ptr<TftpReceiver> testReceiver = std::make_shared<TftpReceiver>(std::move(newsock), testfilenametowrite, testmode, testRemoteEndpoint.address(), testport);
+    std::shared_ptr<TftpReceiver> testReceiver = std::make_shared<TftpReceiver>(std::move(newsock), testfilenametowrite, testmode, testRemoteEndpoint.address(), testport, dummyCallback);
     testReceiver->start();
 
     std::thread t([&testIoContext] () {testIoContext.run();});
@@ -136,7 +138,7 @@ TEST(TTFTPreceiver, lastBlockACKFullFilled)
     std::string testmode = "octet";
 
     boost::asio::ip::udp::socket newsock(testIoContext);
-    std::shared_ptr<TftpReceiver> testReceiver = std::make_shared<TftpReceiver>(std::move(newsock), testfilenametowrite, testmode, testRemoteEndpoint.address(), testport);
+    std::shared_ptr<TftpReceiver> testReceiver = std::make_shared<TftpReceiver>(std::move(newsock), testfilenametowrite, testmode, testRemoteEndpoint.address(), testport, dummyCallback);
     testReceiver->start();
 
     std::thread t([&testIoContext] () {testIoContext.run();});
@@ -200,7 +202,7 @@ TEST(TTFTPreceiver, lastBlockACKHalfFilled)
     std::string testmode = "octet";
 
     boost::asio::ip::udp::socket newsock(testIoContext);
-    std::shared_ptr<TftpReceiver> testReceiver = std::make_shared<TftpReceiver>(std::move(newsock), testfilenametowrite, testmode, testRemoteEndpoint.address(), testport);
+    std::shared_ptr<TftpReceiver> testReceiver = std::make_shared<TftpReceiver>(std::move(newsock), testfilenametowrite, testmode, testRemoteEndpoint.address(), testport, dummyCallback);
     testReceiver->start();
 
     std::thread t([&testIoContext] () {testIoContext.run();});
@@ -264,7 +266,7 @@ TEST(TTFTPreceiver, outputFileCorrectHalfFilledLast)
     std::string testmode = "octet";
 
     boost::asio::ip::udp::socket newsock(testIoContext);
-    std::shared_ptr<TftpReceiver> testReceiver = std::make_shared<TftpReceiver>(std::move(newsock), testfilenametowrite, testmode, testRemoteEndpoint.address(), testport);
+    std::shared_ptr<TftpReceiver> testReceiver = std::make_shared<TftpReceiver>(std::move(newsock), testfilenametowrite, testmode, testRemoteEndpoint.address(), testport, dummyCallback);
     testReceiver->start();
 
     std::thread t([&testIoContext] () {testIoContext.run();});
@@ -342,7 +344,7 @@ TEST(TTFTPreceiver, outputFileCorrectFullFilledLast)
     std::string testmode = "octet";
 
     boost::asio::ip::udp::socket newsock(testIoContext);
-    std::shared_ptr<TftpReceiver> testReceiver = std::make_shared<TftpReceiver>(std::move(newsock), testfilenametowrite, testmode, testRemoteEndpoint.address(), testport);
+    std::shared_ptr<TftpReceiver> testReceiver = std::make_shared<TftpReceiver>(std::move(newsock), testfilenametowrite, testmode, testRemoteEndpoint.address(), testport, dummyCallback);
     testReceiver->start();
 
     std::thread t([&testIoContext] () {testIoContext.run();});
@@ -420,7 +422,7 @@ TEST(TTFTPreceiver, ACKresentAtOldDataBlock)
     std::string testmode = "octet";
 
     boost::asio::ip::udp::socket newsock(testIoContext);
-    std::shared_ptr<TftpReceiver> testReceiver = std::make_shared<TftpReceiver>(std::move(newsock), testfilenametowrite, testmode, testRemoteEndpoint.address(), testport);
+    std::shared_ptr<TftpReceiver> testReceiver = std::make_shared<TftpReceiver>(std::move(newsock), testfilenametowrite, testmode, testRemoteEndpoint.address(), testport, dummyCallback);
     testReceiver->start();
 
     std::thread t([&testIoContext] () {testIoContext.run();});
@@ -488,7 +490,7 @@ TEST(TTFTPreceiver, ErrorOnDataBlockIDTooLarge)
     std::string testmode = "octet";
 
     boost::asio::ip::udp::socket newsock(testIoContext);
-    std::shared_ptr<TftpReceiver> testReceiver = std::make_shared<TftpReceiver>(std::move(newsock), testfilenametowrite, testmode, testRemoteEndpoint.address(), testport);
+    std::shared_ptr<TftpReceiver> testReceiver = std::make_shared<TftpReceiver>(std::move(newsock), testfilenametowrite, testmode, testRemoteEndpoint.address(), testport, dummyCallback);
     testReceiver->start();
 
     std::thread t([&testIoContext] () {testIoContext.run();});
@@ -558,7 +560,7 @@ TEST(TTFTPreceiver, ACKResentOnTimeout)
     std::string testmode = "octet";
 
     boost::asio::ip::udp::socket newsock(testIoContext);
-    std::shared_ptr<TftpReceiver> testSender = std::make_shared<TftpReceiver>(std::move(newsock), testfilenametoread, testmode, testRemoteEndpoint.address(), testport);
+    std::shared_ptr<TftpReceiver> testSender = std::make_shared<TftpReceiver>(std::move(newsock), testfilenametoread, testmode, testRemoteEndpoint.address(), testport, dummyCallback);
     testSender->start();
     std::thread t([&testIoContext] () {testIoContext.run();});
 
@@ -621,7 +623,7 @@ TEST(TTFTPreceiver, ConnectioncloseAfterTimeouts)
     std::string testmode = "octet";
 
     boost::asio::ip::udp::socket newsock(testIoContext);
-    std::shared_ptr<TftpReceiver> testSender = std::make_shared<TftpReceiver>(std::move(newsock), testfilenametoread, testmode, testRemoteEndpoint.address(), testport);
+    std::shared_ptr<TftpReceiver> testSender = std::make_shared<TftpReceiver>(std::move(newsock), testfilenametoread, testmode, testRemoteEndpoint.address(), testport, dummyCallback);
     testSender->start();
     std::thread t([&testIoContext] () {testIoContext.run();});
 
