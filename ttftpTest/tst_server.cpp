@@ -5,7 +5,7 @@
 #include "tftpserver.h"
 #include "tftpsender.h"
 #include "tftpreceiver.h"
-#include "Tftphelpsefs.h"
+#include "tftphelpdefs.h"
 #include <fstream>
 
 using namespace testing;
@@ -26,7 +26,7 @@ TEST(TTFTPServer, ServerStartsRRQConn)
     //fill initial read request message: opcode, filename-string, 0 byte, mode-string, 0 byte
     //mode-string is for now "octet", nothing else is supported
     std::vector<char> RRQmsg(sizeof(uint16_t));
-    uint16_t opcode = static_cast<uint16_t>(TftpOpcodes::RRQ);
+    uint16_t opcode = static_cast<uint16_t>(TftpOpcode::RRQ);
 
     std::string filename = "RRQWriteTestFile.txt";
     std::string mode = "octet";
@@ -98,7 +98,7 @@ TEST(TTFTPServer, ServerStartsRRQConn)
     else
     {
         bool equaldata = std::equal(buffer.begin() + CONTROLBYTES, buffer.end(), ofsinput.begin());
-        bool equalControlInfo = ntohs(*reinterpret_cast<uint16_t*>(buffer.data())) == static_cast<uint16_t>(TftpOpcodes::DATA) && ntohs(*reinterpret_cast<uint16_t*>(buffer.data() + CONTROLBYTES/2)) == 1;
+        bool equalControlInfo = ntohs(*reinterpret_cast<uint16_t*>(buffer.data())) == static_cast<uint16_t>(TftpOpcode::DATA) && ntohs(*reinterpret_cast<uint16_t*>(buffer.data() + CONTROLBYTES/2)) == 1;
         EXPECT_EQ(equaldata, true);
         EXPECT_EQ(equalControlInfo, true);
     }
@@ -118,7 +118,7 @@ TEST(TTFTPServer, ServerStartsWRQConn)
     //fill initial read request message: opcode, filename-string, 0 byte, mode-string, 0 byte
     //mode-string is for now "octet", nothing else is supported
     std::vector<char> RRQmsg(sizeof(uint16_t));
-    uint16_t opcode = static_cast<uint16_t>(TftpOpcodes::WRQ);
+    uint16_t opcode = static_cast<uint16_t>(TftpOpcode::WRQ);
 
     std::string filename = "WRQWriteTestFile.txt";
     std::string mode = "octet";
@@ -190,11 +190,11 @@ TEST(TTFTPServer, ServerStartsWRQConn)
     else
     {
         //bool equaldata = std::equal(buffer.begin() + CONTROLBYTES, buffer.end(), ofsinput.begin());
-        //bool equalControlInfo = ntohs(*reinterpret_cast<uint16_t*>(buffer.data())) == static_cast<uint16_t>(TftpOpcodes::DATA) && ntohs(*reinterpret_cast<uint16_t*>(buffer.data() + CONTROLBYTES/2)) == 1;
+        //bool equalControlInfo = ntohs(*reinterpret_cast<uint16_t*>(buffer.data())) == static_cast<uint16_t>(TftpOpcode::DATA) && ntohs(*reinterpret_cast<uint16_t*>(buffer.data() + CONTROLBYTES/2)) == 1;
         //EXPECT_EQ(equaldata, true);
         //EXPECT_EQ(equalControlInfo, true);
 
-        bool equalControlInfo = ntohs(*reinterpret_cast<uint16_t*>(buffer.data())) == static_cast<uint16_t>(TftpOpcodes::ACK);
+        bool equalControlInfo = ntohs(*reinterpret_cast<uint16_t*>(buffer.data())) == static_cast<uint16_t>(TftpOpcode::ACK);
         bool equalACK = ntohs(*reinterpret_cast<uint16_t*>(buffer.data() + CONTROLBYTES/2)) == 0;
         EXPECT_EQ(equalControlInfo, true);
         EXPECT_EQ(equalACK, true);

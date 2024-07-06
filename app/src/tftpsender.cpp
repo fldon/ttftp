@@ -1,12 +1,22 @@
 #include "tftpsender.h"
-#include "Tftphelpsefs.h"
+#include "tftphelpdefs.h"
 #include <fstream>
 #include <iostream>
 
-Tftpsender::Tftpsender(boost::asio::ip::udp::socket &&INsocket, const std::string &INfilename, const std::string &INmode, const boost::asio::ip::address &INremoteaddress, uint16_t port, std::function<void(std::shared_ptr<Tftpsender>)> OperationDoneCallback, std::size_t INblocksize)
+Tftpsender::Tftpsender(boost::asio::ip::udp::socket &&INsocket, const std::string &INfilename, TftpMode INmode, const boost::asio::ip::address &INremoteaddress, uint16_t port, std::function<void(std::shared_ptr<Tftpsender>)> INOperationDoneCallback, std::size_t INblocksize)
+    :Tftpsender(std::forward<boost::asio::ip::udp::socket>(INsocket), INfilename, INmode, INOperationDoneCallback, INblocksize)
+{
+    mReceiverEndpoint = boost::asio::ip::udp::endpoint(INremoteaddress, port);
+    onConnect();
+}
+
+Tftpsender::Tftpsender(boost::asio::ip::udp::socket &&INsocket, const std::string &INfilename, TftpMode INmode, std::function<void(std::shared_ptr<Tftpsender>)> OperationDoneCallback, std::size_t INblocksize)
     :filename(INfilename), blocksize(INblocksize), remoteConnSocket(std::move(INsocket)), lastsentdata(blocksize + CONTROLBYTES), ackbuffer(blocksize), readTimeoutTimer(remoteConnSocket.get_executor()), mOperationDoneCallback(OperationDoneCallback)
 {
-    remoteConnSocket.connect(boost::asio::ip::udp::endpoint(INremoteaddress, port));
+    if(!remoteConnSocket.is_open())
+    {
+        throw std::runtime_error("Socket supplied in ctor must be open");
+    }
 }
 
 void Tftpsender::start()
@@ -19,7 +29,17 @@ void Tftpsender::start()
     }
     else
     {
-        sendNextBlock();
+        //Server case: If remote connection is established, start by sending first block, subsequently expecting an ACK for block 1
+        if(isConnected)
+        {
+            sendNextBlock();
+        }
+        //Client case: Waiting for answer from server with ACK 0
+        else
+        {
+            lastsentdatacount = 0;
+            startNextReceive();
+        }
     }
 }
 
@@ -48,7 +68,7 @@ void Tftpsender::sendNextBlock()
                                     {
                                         self->readTimeoutTimer.expires_from_now(boost::posix_time::seconds(RETRANSMISSION_TIME));
                                         self->readTimeoutTimer.async_wait(std::bind(&Tftpsender::handleReadTimeout, self, boost::asio::placeholders::error));
-                                        self->remoteConnSocket.async_receive(boost::asio::buffer(self->ackbuffer, self->blocksize), std::bind(&Tftpsender::checkAckForLastBlock, self, boost::asio::placeholders::error, boost::asio::placeholders::bytes_transferred));
+                                        self->startNextReceive();
                                     });
         if(readbytes < blocksize)
         {
@@ -64,7 +84,7 @@ void Tftpsender::checkAckForLastBlock(boost::system::error_code err, std::size_t
     {
         //handle error code: include timeout for read, and differentiate between timeout error (then treat as resend) and actual errors (abort sending)
         uint16_t opcode = ntohs(*reinterpret_cast<uint16_t*>(ackbuffer.data()));
-        if(opcode != static_cast<uint8_t>(TftpOpcodes::ACK))
+        if(opcode != static_cast<uint8_t>(TftpOpcode::ACK))
         {
             sendErrorMsg(4, "Wrong opcode: expected ACK for package" + std::to_string(lastsentdatacount));
             endOperation();
@@ -136,6 +156,31 @@ void Tftpsender::handleReadTimeout(boost::system::error_code err)
             endOperation();
         }
     }
+}
+
+void Tftpsender::startNextReceive()
+{
+    if(isConnected)
+    {
+        remoteConnSocket.async_receive(boost::asio::buffer(ackbuffer, blocksize), std::bind(&Tftpsender::checkAckForLastBlock, shared_from_this(), boost::asio::placeholders::error, boost::asio::placeholders::bytes_transferred));
+    }
+    //Client case: First ack message is used to establish previously unknown endpoint to receiver
+    else
+    {
+        remoteConnSocket.async_receive_from(boost::asio::buffer(ackbuffer, blocksize), mReceiverEndpoint, std::bind(&Tftpsender::handleFirstAckkWithoutConnect, shared_from_this(), boost::asio::placeholders::error, boost::asio::placeholders::bytes_transferred));
+    }
+}
+
+void Tftpsender::handleFirstAckkWithoutConnect(boost::system::error_code err, std::size_t sentbytes)
+{
+    onConnect();
+    checkAckForLastBlock(err, sentbytes);
+}
+
+void Tftpsender::onConnect()
+{
+    remoteConnSocket.connect(mReceiverEndpoint);
+    isConnected = true;
 }
 
 /*!

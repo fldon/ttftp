@@ -1,5 +1,6 @@
 import qbs
 import qbs.Environment
+import qbs.FileInfo
 import "googlecommon.js" as googleCommon
 
 CppApplication {
@@ -28,7 +29,7 @@ CppApplication {
             return tmp.concat([ "pthread" ]);
         }
     }
-    property string projectSourcePath: "../src/"
+    property string projectSourcePath: FileInfo.joinPaths(project.sourceDirectory, "/app/src/")
     cpp.includePaths: [projectSourcePath].concat(googleCommon.getChildPath(qbs, googletestDir, "include"));
     cpp.libraryPaths: googleCommon.getChildPath(qbs, googletestDir, "lib")
 
@@ -42,12 +43,13 @@ CppApplication {
     Group
     {
         name: "Sourcefiles"
-        prefix: projectSourcePath
+        prefix: FileInfo.joinPaths(projectSourcePath)
     files: [
             "tftpclient.cpp",
             "tftpreceiver.cpp",
             "tftpsender.cpp",
             "tftpserver.cpp",
+            "tftphelpdefs.cpp"
         ]
     }
 

@@ -1,13 +1,8 @@
 #include "tftpserver.h"
 #include "tftpsender.h"
 #include "tftpreceiver.h"
-#include "Tftphelpsefs.h"
-
+#include "tftphelpdefs.h"
 #include <iostream>
-
-static constexpr std::size_t DEFAULT_BLOCKSIZE = 512;
-//WORKAROUND!!!!
-static constexpr unsigned short SERVER_LISTEN_PORT = 44500; //for debug: binding to port 69 does not work for some reason
 
 /*
  * General behavior:
@@ -29,7 +24,6 @@ static constexpr unsigned short SERVER_LISTEN_PORT = 44500; //for debug: binding
  * */
 
 //At creation of server, start listening on Port 69
-//TODO: Also, specify a folder to get files from and save files to (should be given from command line eventually)
 TftpServer::TftpServer(std::string INrootfolder)
     :   mIoContext(),
         mStrand(boost::asio::make_strand(mIoContext)),
@@ -53,12 +47,12 @@ void TftpServer::HandleRequest(boost::system::error_code err, std::size_t receiv
         //read opcode (2 bytes):
         uint16_t opcode = *reinterpret_cast<uint16_t*>((buffer.data()));
 
-        if(opcode == static_cast<uint16_t>(TftpOpcodes::RRQ))
+        if(opcode == static_cast<uint16_t>(TftpOpcode::RRQ))
         {
             HandleSubRequest_RRQ();
         }
 
-        else if(opcode == static_cast<uint16_t>(TftpOpcodes::WRQ))
+        else if(opcode == static_cast<uint16_t>(TftpOpcode::WRQ))
         {
             HandleSubRequest_WRQ();
         }
@@ -79,13 +73,13 @@ void TftpServer::HandleSubRequest_RRQ()
 {
     std::string filename_to_read = reinterpret_cast<char*>(buffer.data() + 2);
     filename_to_read = rootfolder + filename_to_read; //get full path
-    std::string mode = reinterpret_cast<char*>(buffer.data() + 2 + filename_to_read.size());
+    std::string mode = reinterpret_cast<char*>(buffer.data() + 2 + filename_to_read.size() + 1);
     uint16_t remoteport = currAccEndpoint.port();
     boost::asio::ip::address remoteaddress = currAccEndpoint.address();
 
-    boost::asio::ip::udp::socket newsock(mStrand);
+    boost::asio::ip::udp::socket newsock(mStrand, boost::asio::ip::udp::v4());
     //Tftpsender sender(std::move(newsock), filename_to_read, mode, remoteaddress, remoteport, DEFAULT_BLOCKSIZE);
-    std::shared_ptr<Tftpsender> sender = std::make_shared<Tftpsender>(std::move(newsock), filename_to_read, mode, remoteaddress, remoteport, std::bind(&TftpServer::removeSenderFromList, this, std::placeholders::_1), DEFAULT_BLOCKSIZE);
+    std::shared_ptr<Tftpsender> sender = std::make_shared<Tftpsender>(std::move(newsock), filename_to_read, str2mode(mode), remoteaddress, remoteport, std::bind(&TftpServer::removeSenderFromList, this, std::placeholders::_1), DEFAULT_BLOCKSIZE);
     mSenderList.push_back(sender);
     sender->start();
 }
@@ -97,12 +91,12 @@ void TftpServer::HandleSubRequest_WRQ()
 {
     std::string filename_to_write = reinterpret_cast<char*>(buffer.data() + 2);
     filename_to_write = rootfolder + filename_to_write; //get full path
-    std::string mode = reinterpret_cast<char*>(buffer.data() + 2 + filename_to_write.size());
+    std::string mode = reinterpret_cast<char*>(buffer.data() + 2 + filename_to_write.size() + 1);
     uint16_t remoteport = currAccEndpoint.port();
     boost::asio::ip::address remoteaddress = currAccEndpoint.address();
 
-    boost::asio::ip::udp::socket newsock(mStrand);
-    std::shared_ptr<TftpReceiver> receiver = std::make_shared<TftpReceiver>(std::move(newsock), filename_to_write, mode, remoteaddress, remoteport, std::bind(&TftpServer::removeReceiverFromList, this, std::placeholders::_1) ,DEFAULT_BLOCKSIZE);
+    boost::asio::ip::udp::socket newsock(mStrand, boost::asio::ip::udp::v4());
+    std::shared_ptr<TftpReceiver> receiver = std::make_shared<TftpReceiver>(std::move(newsock), filename_to_write, str2mode(mode), remoteaddress, remoteport, std::bind(&TftpServer::removeReceiverFromList, this, std::placeholders::_1) ,DEFAULT_BLOCKSIZE);
     mReceiverList.push_back(receiver);
     receiver->start();
 }
