@@ -3,8 +3,6 @@
 #include <gtest/gtest.h>
 
 #include "tftpserver.h"
-#include "tftpsender.h"
-#include "tftpreceiver.h"
 #include "tftphelpdefs.h"
 #include <fstream>
 
@@ -12,16 +10,15 @@ using namespace testing;
 
 using namespace std::chrono_literals;
 
-static constexpr unsigned short DEBUG_SERVERPORT = 44500;
 static constexpr unsigned int NUM_OF_BLOCKS = 5;
+
+//TODO: The tests below actually partially test the receiver/sender classes. What I actually want to test is whether the correct object of either class is created in response to the request.
+//But how could I test for that specifically?
 
 //test whether the server properly responds from a new port with the first data block, when a read request is sent to port 69
 TEST(TTFTPServer, ServerStartsRRQConn)
 {
-    //start server or client program depending on user input, and also have the user determine the options directly on the command line
     static constexpr unsigned int NUM_OF_BLOCKS = 5;
-
-    static constexpr unsigned short DEBUG_SERVERPORT = 44500;
 
     //fill initial read request message: opcode, filename-string, 0 byte, mode-string, 0 byte
     //mode-string is for now "octet", nothing else is supported
@@ -69,14 +66,14 @@ TEST(TTFTPServer, ServerStartsRRQConn)
 
 
     //start server
-    TftpServer server(""); //rootfolder is just rootfolder of test
+    TftpServer server("", testIoContext); //rootfolder is just rootfolder of test
 
-
+    std::thread t([&testIoContext] () {testIoContext.run();});
 
     bool timeout = false;
 
     //send request to server, check response
-    testRemoteConnSocket.send_to(boost::asio::buffer(RRQmsg, RRQmsg.size()), boost::asio::ip::udp::endpoint(boost::asio::ip::udp::v4(), DEBUG_SERVERPORT));
+    testRemoteConnSocket.send_to(boost::asio::buffer(RRQmsg, RRQmsg.size()), boost::asio::ip::udp::endpoint(boost::asio::ip::udp::v4(), SERVER_LISTEN_PORT));
 
 
 
@@ -88,7 +85,7 @@ TEST(TTFTPServer, ServerStartsRRQConn)
     timeout = false;
     std::future<std::size_t> my_future =
         testRemoteConnSocket.async_receive_from(boost::asio::buffer(buffer, buffer.size()), localsenderendpoint, boost::asio::use_future);
-    std::thread t([&testIoContext] () {testIoContext.run();});
+
     auto futurestatus = my_future.wait_for(15s);
     if(futurestatus == std::future_status::timeout)
     {
@@ -102,6 +99,7 @@ TEST(TTFTPServer, ServerStartsRRQConn)
         EXPECT_EQ(equaldata, true);
         EXPECT_EQ(equalControlInfo, true);
     }
+    testIoContext.stop();
     t.join();
     EXPECT_EQ(timeout,  false);
 }
@@ -110,10 +108,7 @@ TEST(TTFTPServer, ServerStartsRRQConn)
 //test whether the server properly responds from a new port with an ACK 0, when a write request is sent to port 69
 TEST(TTFTPServer, ServerStartsWRQConn)
 {
-    //start server or client program depending on user input, and also have the user determine the options directly on the command line
     static constexpr unsigned int NUM_OF_BLOCKS = 5;
-
-    static constexpr unsigned short DEBUG_SERVERPORT = 44500;
 
     //fill initial read request message: opcode, filename-string, 0 byte, mode-string, 0 byte
     //mode-string is for now "octet", nothing else is supported
@@ -161,14 +156,14 @@ TEST(TTFTPServer, ServerStartsWRQConn)
 
 
     //start server
-    TftpServer server(""); //rootfolder is just rootfolder of test
+    TftpServer server("", testIoContext); //rootfolder is just rootfolder of test
 
 
 
     bool timeout = false;
 
     //send request to server, check response
-    testRemoteConnSocket.send_to(boost::asio::buffer(RRQmsg, RRQmsg.size()), boost::asio::ip::udp::endpoint(boost::asio::ip::udp::v4(), DEBUG_SERVERPORT));
+    testRemoteConnSocket.send_to(boost::asio::buffer(RRQmsg, RRQmsg.size()), boost::asio::ip::udp::endpoint(boost::asio::ip::udp::v4(), SERVER_LISTEN_PORT));
 
 
 
@@ -199,10 +194,7 @@ TEST(TTFTPServer, ServerStartsWRQConn)
         EXPECT_EQ(equalControlInfo, true);
         EXPECT_EQ(equalACK, true);
     }
+    testIoContext.stop();
     t.join();
     EXPECT_EQ(timeout,  false);
 }
-
-//TODO:
-//Test if server sends whole file correctly with read request (see sender test)
-//Test if server receives whole file correctly with write request (see receiver test)

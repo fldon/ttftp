@@ -35,6 +35,7 @@ CppApplication {
 
     files: [
         "main.cpp",
+        "tst_client.cpp",
         "tst_server.cpp",
         "tst_ttftpreceiver.cpp",
         "tst_ttftpsender.cpp",

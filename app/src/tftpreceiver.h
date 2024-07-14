@@ -18,14 +18,14 @@ public:
         TftpMode mode,
         const boost::asio::ip::address &remoteaddress,
         uint16_t port,
-        std::function<void(std::shared_ptr<TftpReceiver>)> OperationDoneCallback = [](std::shared_ptr<TftpReceiver>){},
+        std::function<void(std::shared_ptr<TftpReceiver>, boost::system::error_code err)> OperationDoneCallback = [](std::shared_ptr<TftpReceiver>, boost::system::error_code){},
         std::size_t blocksize = 512);
 
     //Ctor if remote endpoint is not known yet (for client use)
     TftpReceiver(boost::asio::ip::udp::socket &&INsocket,
         const std::string &filename,
         TftpMode mode,
-        std::function<void(std::shared_ptr<TftpReceiver>)> OperationDoneCallback = [](std::shared_ptr<TftpReceiver>){},
+        std::function<void(std::shared_ptr<TftpReceiver>, boost::system::error_code)> OperationDoneCallback = [](std::shared_ptr<TftpReceiver>, boost::system::error_code){},
         std::size_t blocksize = 512);
 
     void start();
@@ -42,7 +42,7 @@ private:
 
     void onConnect();
 
-    void endOperation();
+    void endOperation(boost::system::error_code err = boost::system::error_code());
 
     std::string filename = "";
     std::size_t blocksize{0};
@@ -54,10 +54,11 @@ private:
     boost::asio::deadline_timer readTimeoutTimer;
     uint16_t timeoutcount{0};
 
-    std::function<void(std::shared_ptr<TftpReceiver>)> mOperationDoneCallback;
+    std::function<void(std::shared_ptr<TftpReceiver>, boost::system::error_code)> mOperationDoneCallback;
 
     boost::asio::ip::udp::endpoint mSenderEndpoint;
     bool isConnected = false;
+    bool operationEnded = false;
 };
 
 #endif // TFTPRECEIVER_H

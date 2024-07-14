@@ -4,7 +4,7 @@
 #include <cstdint>
 #include <string>
 
-enum class TftpOpcode {RRQ=1, WRQ, DATA, ACK, ERROR};
+enum class TftpOpcode {INVALID, RRQ=1, WRQ, DATA, ACK, ERROR};
 enum class TftpMode {OCTET};
 
 TftpMode str2mode(std::string mode);

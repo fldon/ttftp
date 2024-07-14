@@ -24,16 +24,24 @@
  * */
 
 //At creation of server, start listening on Port 69
-TftpServer::TftpServer(std::string INrootfolder)
-    :   mIoContext(),
+TftpServer::TftpServer(std::string INrootfolder, boost::asio::io_context &ctx)
+    :   mIoContext(ctx),
         mStrand(boost::asio::make_strand(mIoContext)),
         mAccSocket(mStrand, boost::asio::ip::udp::endpoint(boost::asio::ip::udp::v4(), SERVER_LISTEN_PORT)),
         rootfolder(INrootfolder)
 {
     buffer.fill(0);
-    mAccSocket.async_receive_from(boost::asio::buffer(buffer, BUFSIZE), currAccEndpoint, std::bind(&TftpServer::HandleRequest, this, boost::asio::placeholders::error, boost::asio::placeholders::bytes_transferred));
-    std::thread t([this] () {mIoContext.run();});
-    mServerThread = std::move(t);
+    mAccSocket.async_receive_from(boost::asio::buffer(buffer, BUFSIZE),
+                                  currAccEndpoint,
+                                  std::bind(&TftpServer::HandleRequest, this, boost::asio::placeholders::error, boost::asio::placeholders::bytes_transferred));
+}
+
+/*!
+ * \brief Runs the IOContext queue until an error occurs or a termination signal arrives. Blocks until then.
+ */
+void TftpServer::run()
+{
+    mIoContext.run();
 }
 
 void TftpServer::HandleRequest(boost::system::error_code err, std::size_t receivedbytes)
@@ -110,7 +118,6 @@ TftpServer::~TftpServer()
 {
     mAccSocket.close();
     mIoContext.stop();
-    mServerThread.join();
 }
 
 

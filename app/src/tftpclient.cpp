@@ -20,9 +20,9 @@
  * */
 
 
-TftpClient::TftpClient(std::string INrootfolder)
+TftpClient::TftpClient(std::string INrootfolder, boost::asio::io_context &ctx)
     :
-    mIoContext(),
+    mIoContext(ctx),
     mStrand(boost::asio::make_strand(mIoContext)),
     mRootfolder(INrootfolder),
     mTransfer_running(false)
@@ -37,15 +37,19 @@ TftpClient::TftpClient(std::string INrootfolder)
  * \param transfermode
  * \param on_finish_callback
  */
-void TftpClient::start(boost::asio::ip::address server_address, TftpOpcode requestType, std::string filename, TftpMode transfermode, std::function<void(TftpClient*)> on_finish_callback)
+void TftpClient::start(boost::asio::ip::address server_address, TftpOpcode requestType, std::string filename, TftpMode transfermode, std::function<void(TftpClient*, boost::system::error_code)> on_finish_callback)
 {
+    if(server_address.is_unspecified())
+    {
+        throw std::runtime_error("TftpClient::start: supplied server address is unspecified: " + server_address.to_string());
+    }
     //Client must send its request on SERVER_LISTEN_PORT
     //But then for the actual transmission it must wait for an ACK (if WRQ) or first data block (if RRQ) from another port by the server; and then it has to start the transfer using that port
     switch(requestType)
     {
     case TftpOpcode::RRQ:
     {
-        uint16_t opcode = *reinterpret_cast<uint16_t*>(TftpOpcode::RRQ);
+        uint16_t opcode = static_cast<uint16_t>(TftpOpcode::RRQ);
         std::string modestr = mode2str(TftpMode::OCTET);
 
         static constexpr std::size_t BUFSIZE = 2048;
@@ -85,14 +89,14 @@ void TftpClient::start(boost::asio::ip::address server_address, TftpOpcode reque
 
         //Receiver is constructed without knowing remote endpoint of server - it will receive the first block as acknowledgement, or time out
         std::string filepath_to_write = mRootfolder + filename; //get full path
-        std::shared_ptr<TftpReceiver> receiver = std::make_shared<TftpReceiver>(std::move(sock), filepath_to_write, transfermode, std::bind(&TftpClient::on_receiver_done, this, std::placeholders::_1) ,DEFAULT_BLOCKSIZE);
+        std::shared_ptr<TftpReceiver> receiver = std::make_shared<TftpReceiver>(std::move(sock), filepath_to_write, transfermode, std::bind(&TftpClient::on_receiver_done, this, std::placeholders::_1, std::placeholders::_2) ,DEFAULT_BLOCKSIZE);
         mTransfer_running = true;
         mTransferDoneCallback = on_finish_callback;
         receiver->start();
-    }
+    }break;
     case TftpOpcode::WRQ:
     {
-        uint16_t opcode = *reinterpret_cast<uint16_t*>(TftpOpcode::WRQ);
+        uint16_t opcode = static_cast<uint16_t>(TftpOpcode::WRQ);
         std::string modestr = mode2str(TftpMode::OCTET);
 
         static constexpr std::size_t BUFSIZE = 2048;
@@ -132,11 +136,11 @@ void TftpClient::start(boost::asio::ip::address server_address, TftpOpcode reque
 
         //Sender is constructed without knowing remote endpoint of server - it will receive the first ACK for block 0, or time out
         std::string filepath_to_write = mRootfolder + filename; //get full path
-        std::shared_ptr<Tftpsender> sender = std::make_shared<Tftpsender>(std::move(sock), filepath_to_write, transfermode, std::bind(&TftpClient::on_sender_done, this, std::placeholders::_1) ,DEFAULT_BLOCKSIZE);
+        std::shared_ptr<Tftpsender> sender = std::make_shared<Tftpsender>(std::move(sock), filepath_to_write, transfermode, std::bind(&TftpClient::on_sender_done, this, std::placeholders::_1, std::placeholders::_2) ,DEFAULT_BLOCKSIZE);
         mTransfer_running = true;
         mTransferDoneCallback = on_finish_callback;
         sender->start();
-    }
+    }break;
     default:
     {
         throw std::runtime_error("TftpClient::start: invalid request type: " + std::to_string(static_cast<uint16_t>(requestType)));
@@ -150,13 +154,13 @@ bool TftpClient::is_transfer_running() const
 }
 
 
-void TftpClient::on_sender_done(std::shared_ptr<Tftpsender> finished_sender)
+void TftpClient::on_sender_done(std::shared_ptr<Tftpsender> finished_sender, boost::system::error_code err)
 {
     mTransfer_running = false;
-    mTransferDoneCallback(this);
+    mTransferDoneCallback(this, err);
 }
-void TftpClient::on_receiver_done(std::shared_ptr<TftpReceiver> finished_receiver)
+void TftpClient::on_receiver_done(std::shared_ptr<TftpReceiver> finished_receiver, boost::system::error_code err)
 {
     mTransfer_running = false;
-    mTransferDoneCallback(this);
+    mTransferDoneCallback(this, err);
 }

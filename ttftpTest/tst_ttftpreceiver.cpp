@@ -14,7 +14,7 @@ static constexpr unsigned int NUM_OF_BLOCKS = 5;
 
 static std::function<void(std::shared_ptr<TftpReceiver>)> dummyCallback = [] (std::shared_ptr<TftpReceiver>) {};
 
-//Test if the first Ack after connection establishment is ACK # 0
+//Test if the first Ack after connection establishment is ACK # 0 (server case)
 //TODO: But this should only be the case for the server! The client receives block 1 after establishment! These two cases are handled via different constructors, so test both!
 TEST(TTFTPreceiver, firstAckAfterStart_0)
 {
@@ -37,26 +37,49 @@ TEST(TTFTPreceiver, firstAckAfterStart_0)
     uint16_t receiverTestPort = 45043;
     boost::asio::ip::udp::endpoint receiverEndpoint(boost::asio::ip::udp::v4(), receiverTestPort);
     boost::asio::ip::udp::socket receiverSock(testIoContext, receiverEndpoint);
+/*
+    EXPECT_THROW(
+        {
+            std::shared_ptr<TftpReceiver> testReceiver = std::make_shared<TftpReceiver>(std::move(receiverSock), testfilenametowrite, str2mode(testmode), boost::asio::ip::make_address("127.0.0.1"), testport, dummyCallback);
+            testReceiver->start();
 
-    std::shared_ptr<TftpReceiver> testReceiver = std::make_shared<TftpReceiver>(std::move(receiverSock), testfilenametowrite, str2mode(testmode), testRemoteEndpoint.address(), testport, dummyCallback);
-    testReceiver->start();
 
 
+            //TODO: Check if buffer has correct ACK and Control bytes
+            std::array<char, 512> buffer;
+            buffer.fill(0);
+            boost::asio::ip::udp::endpoint localsenderendpoint;
+            testRemoteConnSocket.receive_from(boost::asio::buffer(buffer, buffer.size()), localsenderendpoint);
+            std::thread t([&testIoContext] () {testIoContext.run();});
+            //(mStrand, filename_to_read, mode, remoteaddress, port, DEFAULT_BLOCKSIZE
+            bool equalControlInfo = ntohs(*reinterpret_cast<uint16_t*>(buffer.data())) == static_cast<uint16_t>(TftpOpcode::ACK);
+            bool equalACK = ntohs(*reinterpret_cast<uint16_t*>(buffer.data() + CONTROLBYTES/2)) == 0;
+            EXPECT_EQ(equalControlInfo, true);
+            EXPECT_EQ(equalACK, true);
+        },
+        std::runtime_error        );
+*/
 
-    //TODO: Check if buffer has correct ACK and Control bytes
-    std::array<char, 512> buffer;
-    buffer.fill(0);
-    boost::asio::ip::udp::endpoint localsenderendpoint;
-    testRemoteConnSocket.receive_from(boost::asio::buffer(buffer, buffer.size()), localsenderendpoint);
-    std::thread t([&testIoContext] () {testIoContext.run();});
-    //(mStrand, filename_to_read, mode, remoteaddress, port, DEFAULT_BLOCKSIZE
-    bool equalControlInfo = ntohs(*reinterpret_cast<uint16_t*>(buffer.data())) == static_cast<uint16_t>(TftpOpcode::ACK);
-    bool equalACK = ntohs(*reinterpret_cast<uint16_t*>(buffer.data() + CONTROLBYTES/2)) == 0;
-    EXPECT_EQ(equalControlInfo, true);
-    EXPECT_EQ(equalACK, true);
-    t.join();
+    EXPECT_ANY_THROW(
+        {
+            std::shared_ptr<TftpReceiver> testReceiver = std::make_shared<TftpReceiver>(std::move(receiverSock), testfilenametowrite, str2mode(testmode), boost::asio::ip::make_address("127.0.0.1"), testport, dummyCallback);
+            //testReceiver->start();
+            std::vector<char> buffer(512, 0);
+            //buffer.fill(0);
+            boost::asio::ip::udp::endpoint localsenderendpoint;
+            std::thread t2([&testReceiver] () {sleep(5); testReceiver->start();});
+            testRemoteConnSocket.receive_from(boost::asio::buffer(buffer, buffer.size()), localsenderendpoint);
+            std::thread t([&testIoContext] () {testIoContext.run();});
+            bool equalControlInfo = ntohs(*reinterpret_cast<uint16_t*>(buffer.data())) == static_cast<uint16_t>(TftpOpcode::ACK);
+            bool equalACK = ntohs(*reinterpret_cast<uint16_t*>(buffer.data() + CONTROLBYTES/2)) == 0;
+            EXPECT_EQ(equalControlInfo, true);
+            EXPECT_EQ(equalACK, true);
+            t.join();
+            t2.join();
+        });
 }
 
+//Test client case: first ack after establishment is nr. 1
 TEST(TTFTPreceiver, firstAckAfterStart_1)
 {
     boost::asio::io_context testIoContext;

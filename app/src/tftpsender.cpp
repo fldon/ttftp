@@ -3,14 +3,14 @@
 #include <fstream>
 #include <iostream>
 
-Tftpsender::Tftpsender(boost::asio::ip::udp::socket &&INsocket, const std::string &INfilename, TftpMode INmode, const boost::asio::ip::address &INremoteaddress, uint16_t port, std::function<void(std::shared_ptr<Tftpsender>)> INOperationDoneCallback, std::size_t INblocksize)
+Tftpsender::Tftpsender(boost::asio::ip::udp::socket &&INsocket, const std::string &INfilename, TftpMode INmode, const boost::asio::ip::address &INremoteaddress, uint16_t port, std::function<void(std::shared_ptr<Tftpsender>, boost::system::error_code)> INOperationDoneCallback, std::size_t INblocksize)
     :Tftpsender(std::forward<boost::asio::ip::udp::socket>(INsocket), INfilename, INmode, INOperationDoneCallback, INblocksize)
 {
     mReceiverEndpoint = boost::asio::ip::udp::endpoint(INremoteaddress, port);
     onConnect();
 }
 
-Tftpsender::Tftpsender(boost::asio::ip::udp::socket &&INsocket, const std::string &INfilename, TftpMode INmode, std::function<void(std::shared_ptr<Tftpsender>)> OperationDoneCallback, std::size_t INblocksize)
+Tftpsender::Tftpsender(boost::asio::ip::udp::socket &&INsocket, const std::string &INfilename, TftpMode INmode, std::function<void(std::shared_ptr<Tftpsender>, boost::system::error_code)> OperationDoneCallback, std::size_t INblocksize)
     :filename(INfilename), blocksize(INblocksize), remoteConnSocket(std::move(INsocket)), lastsentdata(blocksize + CONTROLBYTES), ackbuffer(blocksize), readTimeoutTimer(remoteConnSocket.get_executor()), mOperationDoneCallback(OperationDoneCallback)
 {
     if(!remoteConnSocket.is_open())
@@ -25,6 +25,7 @@ void Tftpsender::start()
     if(!ifs)
     {
         sendErrorMsg(1, "Requested file not found");
+        //TODO: what errorcode to set?
         endOperation();
     }
     else
@@ -60,9 +61,6 @@ void Tftpsender::sendNextBlock()
         *reinterpret_cast<uint16_t*>(lastsentdata.data()) = htons(3);
         *reinterpret_cast<uint16_t*>(lastsentdata.data() + CONTROLBYTES / 2) = htons(lastsentdatacount);
 
-        //JUST FOR DEBUG
-        std::cout << "Sent Data Block message:" << std::string(lastsentdata.begin(), lastsentdata.begin() + readbytes + CONTROLBYTES) << "\n";
-
         auto self = shared_from_this();
         remoteConnSocket.async_send(boost::asio::buffer(lastsentdata, readbytes + CONTROLBYTES), [self](boost::system::error_code err, std::size_t sentbytes)
                                     {
@@ -87,6 +85,7 @@ void Tftpsender::checkAckForLastBlock(boost::system::error_code err, std::size_t
         if(opcode != static_cast<uint8_t>(TftpOpcode::ACK))
         {
             sendErrorMsg(4, "Wrong opcode: expected ACK for package" + std::to_string(lastsentdatacount));
+            //TODO: what errorcode to set?
             endOperation();
         }
         else
@@ -105,6 +104,7 @@ void Tftpsender::checkAckForLastBlock(boost::system::error_code err, std::size_t
             else if(ack_block > lastsentdatacount)
             {
                 sendErrorMsg(4, "ACK for package that was not yet sent: expected " + std::to_string(lastsentdatacount) + ", got " + std::to_string(ack_block));
+                //TODO: what errorcode to set?
                 endOperation();
             }
         }
@@ -117,7 +117,7 @@ void Tftpsender::checkAckForLastBlock(boost::system::error_code err, std::size_t
     else
     {
         //unfixable error; close connection without sending further error message
-        endOperation();
+        endOperation(err);
     }
 }
 
@@ -153,7 +153,7 @@ void Tftpsender::handleReadTimeout(boost::system::error_code err)
         else
         {
             sendErrorMsg(4, "Timeout while waiting for ACK for Data Packet " + std::to_string(lastsentdatacount));
-            endOperation();
+            endOperation(err);
         }
     }
 }
@@ -186,8 +186,12 @@ void Tftpsender::onConnect()
 /*!
  * \brief Call the constructor-provided callback when the operation ends (due to error or regular end of transfer)
  */
-void Tftpsender::endOperation()
+void Tftpsender::endOperation(boost::system::error_code err)
 {
-    remoteConnSocket.close();
-    mOperationDoneCallback(shared_from_this());
+    if(!operationEnded)
+    {
+        operationEnded = true;
+        remoteConnSocket.close();
+        mOperationDoneCallback(shared_from_this(), err);
+    }
 }

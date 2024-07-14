@@ -1,5 +1,5 @@
 CppApplication {
-    name: "TTFTPApp"
+    name: "TTFTP"
     consoleApplication: true
     install: true
     Group
