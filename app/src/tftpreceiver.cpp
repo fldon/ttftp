@@ -2,20 +2,20 @@
 #include "tftphelpdefs.h"
 #include <fstream>
 
-TftpReceiver::TftpReceiver(boost::asio::ip::udp::socket &&INsocket, const std::string &INfilename, TftpMode INmode, const boost::asio::ip::address &remoteaddress, uint16_t port, std::function<void(std::shared_ptr<TftpReceiver>, boost::system::error_code)> INoperationDoneCallback, std::size_t INblocksize)
+TftpReceiver::TftpReceiver(boost::asio::ip::udp::socket &&INsocket, std::shared_ptr<std::ostream> outputstream, TftpMode INmode, const boost::asio::ip::address &remoteaddress, uint16_t port, std::function<void(std::shared_ptr<TftpReceiver>, boost::system::error_code)> INoperationDoneCallback, std::size_t INblocksize)
     //:filename(INfilename), blocksize(INblocksize), remoteConnSocket(std::move(INsocket)), lastsentack(blocksize), databuffer(blocksize + CONTROLBYTES), readTimeoutTimer(remoteConnSocket.get_executor()), mOperationDoneCallback(OperationDoneCallback)
-    :TftpReceiver(std::forward<boost::asio::ip::udp::socket>(INsocket), INfilename, INmode, INoperationDoneCallback, INblocksize)
+    :TftpReceiver(std::forward<boost::asio::ip::udp::socket>(INsocket), outputstream, INmode, INoperationDoneCallback, INblocksize)
 {
     mSenderEndpoint = boost::asio::ip::udp::endpoint(remoteaddress, port);
     onConnect();
 }
 
 TftpReceiver::TftpReceiver(boost::asio::ip::udp::socket &&INsocket,
-    const std::string &INfilename,
+    std::shared_ptr<std::ostream> outputstream,
     TftpMode INmode,
     std::function<void(std::shared_ptr<TftpReceiver>, boost::system::error_code)> INoperationDoneCallback,
     std::size_t INblocksize)
-    :filename(INfilename), blocksize(INblocksize), remoteConnSocket(std::move(INsocket)), lastsentack(blocksize), databuffer(blocksize + CONTROLBYTES), readTimeoutTimer(remoteConnSocket.get_executor()), mOperationDoneCallback(INoperationDoneCallback)
+    :output(outputstream), blocksize(INblocksize), remoteConnSocket(std::move(INsocket)), lastsentack(blocksize), databuffer(blocksize + CONTROLBYTES), readTimeoutTimer(remoteConnSocket.get_executor()), mOperationDoneCallback(INoperationDoneCallback)
 {
     if(!remoteConnSocket.is_open())
     {
@@ -25,15 +25,15 @@ TftpReceiver::TftpReceiver(boost::asio::ip::udp::socket &&INsocket,
 
 void TftpReceiver::start()
 {
-    /*
-    std::ofstream ofs(filename);
-    if(!ofs)
+
+    //std::ofstream ofs(filename);
+    if(!output)
     {
         sendErrorMsg(1, "Requested file could not be opened for output");
         throw std::runtime_error("Output file could not be opened!");
         endOperation();
     }
-*/
+
     {
         //Server case: If remote connection is already established, start by sending ACK with number 0
         if(isConnected)
@@ -83,15 +83,15 @@ void TftpReceiver::checkReceivedBlock(boost::system::error_code err, std::size_t
                     timeoutcount = 0;
 
                     //Write contents of data buffer into file
-                    std::ofstream ofs(filename, std::ios_base::binary | std::ios_base::app);
-                    if(!ofs)
+                    //std::ofstream ofs(filename, std::ios_base::binary | std::ios_base::app);
+                    if(!(*output))
                     {
                         sendErrorMsg(1, "Requested file could not be opened for output");
                         throw std::runtime_error("Output file could not be opened!");
                         //TODO: what errorcode to set?
                         endOperation();
                     }
-                    ofs.write(databuffer.data() + CONTROLBYTES, sentbytes - CONTROLBYTES);
+                    output->write(databuffer.data() + CONTROLBYTES, sentbytes - CONTROLBYTES);
 
                     //Check number of sent bytes and end connection if it is < blocksize
                     if(sentbytes == blocksize + CONTROLBYTES)

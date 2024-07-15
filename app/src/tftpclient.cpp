@@ -1,4 +1,5 @@
 #include "tftpclient.h"
+#include <fstream>
 
 /*
  * General behavior:
@@ -89,7 +90,10 @@ void TftpClient::start(boost::asio::ip::address server_address, TftpOpcode reque
 
         //Receiver is constructed without knowing remote endpoint of server - it will receive the first block as acknowledgement, or time out
         std::string filepath_to_write = mRootfolder + filename; //get full path
-        std::shared_ptr<TftpReceiver> receiver = std::make_shared<TftpReceiver>(std::move(sock), filepath_to_write, transfermode, std::bind(&TftpClient::on_receiver_done, this, std::placeholders::_1, std::placeholders::_2) ,DEFAULT_BLOCKSIZE);
+
+        std::shared_ptr<std::ostream> ofs(new std::ofstream(filepath_to_write, std::ios_base::binary | std::ios_base::app));
+
+        std::shared_ptr<TftpReceiver> receiver = std::make_shared<TftpReceiver>(std::move(sock), ofs, transfermode, std::bind(&TftpClient::on_receiver_done, this, std::placeholders::_1, std::placeholders::_2) ,DEFAULT_BLOCKSIZE);
         mTransfer_running = true;
         mTransferDoneCallback = on_finish_callback;
         receiver->start();
@@ -135,8 +139,11 @@ void TftpClient::start(boost::asio::ip::address server_address, TftpOpcode reque
         sock.send_to(boost::asio::buffer(IObuffer, messagesize_total), boost::asio::ip::udp::endpoint(server_address, SERVER_LISTEN_PORT));
 
         //Sender is constructed without knowing remote endpoint of server - it will receive the first ACK for block 0, or time out
-        std::string filepath_to_write = mRootfolder + filename; //get full path
-        std::shared_ptr<Tftpsender> sender = std::make_shared<Tftpsender>(std::move(sock), filepath_to_write, transfermode, std::bind(&TftpClient::on_sender_done, this, std::placeholders::_1, std::placeholders::_2) ,DEFAULT_BLOCKSIZE);
+        std::string filepath_to_read = mRootfolder + filename; //get full path
+
+        std::shared_ptr<std::istream> ifs(new std::ifstream(filepath_to_read, std::ios_base::binary));
+
+        std::shared_ptr<Tftpsender> sender = std::make_shared<Tftpsender>(std::move(sock), ifs, transfermode, std::bind(&TftpClient::on_sender_done, this, std::placeholders::_1, std::placeholders::_2) ,DEFAULT_BLOCKSIZE);
         mTransfer_running = true;
         mTransferDoneCallback = on_finish_callback;
         sender->start();

@@ -1,10 +1,5 @@
 #include <iostream>
-#include <fstream>
 #include <map>
-#include <mutex>
-#include <chrono>
-#include <condition_variable>
-#include <thread>
 #include "tftpserver.h"
 #include "tftpclient.h"
 
@@ -16,11 +11,26 @@ using namespace std::chrono_literals;
 //Prints a general message about usage and ends the programm
 void print_usage_msg();
 
+void run(int argc, char* argv[]);
+
 //TODO: include mode (currently only octet mode so no point)
 /*
  * Usage: TTFTP <--type=server/client> <--root=rootfolder> <Client: --request=read/write> <Client: --file=filename> <Client: remote IP (ipv4 and netmask)>
  * */
 int main(int argc, char* argv[])
+{
+    run(argc, argv);
+}
+
+void print_usage_msg()
+{
+    std::string msg = "Usage: TTFTP <--type=server/client> <--root=rootfolder> <Client: --request=read/write> <Client: --file=filename> <Client: remote IP (ipv4 or ipv6)>";
+    std::cout << msg << "\n";
+    exit(1);
+}
+
+
+void run(int argc, char* argv[])
 {
     constexpr int MIN_ARGS = 1;
     if(argc < MIN_ARGS)
@@ -126,11 +136,4 @@ int main(int argc, char* argv[])
     {
         print_usage_msg();
     }
-}
-
-void print_usage_msg()
-{
-    std::string msg = "Usage: TTFTP <--type=server/client> <--root=rootfolder> <Client: --request=read/write> <Client: --file=filename> <Client: remote IP (ipv4 or ipv6)>";
-    std::cout << msg << "\n";
-    exit(1);
 }

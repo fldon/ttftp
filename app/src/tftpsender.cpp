@@ -3,15 +3,15 @@
 #include <fstream>
 #include <iostream>
 
-Tftpsender::Tftpsender(boost::asio::ip::udp::socket &&INsocket, const std::string &INfilename, TftpMode INmode, const boost::asio::ip::address &INremoteaddress, uint16_t port, std::function<void(std::shared_ptr<Tftpsender>, boost::system::error_code)> INOperationDoneCallback, std::size_t INblocksize)
-    :Tftpsender(std::forward<boost::asio::ip::udp::socket>(INsocket), INfilename, INmode, INOperationDoneCallback, INblocksize)
+Tftpsender::Tftpsender(boost::asio::ip::udp::socket &&INsocket, std::shared_ptr<std::istream> inputstream, TftpMode INmode, const boost::asio::ip::address &INremoteaddress, uint16_t port, std::function<void(std::shared_ptr<Tftpsender>, boost::system::error_code)> INOperationDoneCallback, std::size_t INblocksize)
+    :Tftpsender(std::forward<boost::asio::ip::udp::socket>(INsocket), inputstream, INmode, INOperationDoneCallback, INblocksize)
 {
     mReceiverEndpoint = boost::asio::ip::udp::endpoint(INremoteaddress, port);
     onConnect();
 }
 
-Tftpsender::Tftpsender(boost::asio::ip::udp::socket &&INsocket, const std::string &INfilename, TftpMode INmode, std::function<void(std::shared_ptr<Tftpsender>, boost::system::error_code)> OperationDoneCallback, std::size_t INblocksize)
-    :filename(INfilename), blocksize(INblocksize), remoteConnSocket(std::move(INsocket)), lastsentdata(blocksize + CONTROLBYTES), ackbuffer(blocksize), readTimeoutTimer(remoteConnSocket.get_executor()), mOperationDoneCallback(OperationDoneCallback)
+Tftpsender::Tftpsender(boost::asio::ip::udp::socket &&INsocket, std::shared_ptr<std::istream> inputstream, TftpMode INmode, std::function<void(std::shared_ptr<Tftpsender>, boost::system::error_code)> OperationDoneCallback, std::size_t INblocksize)
+    :input(inputstream), blocksize(INblocksize), remoteConnSocket(std::move(INsocket)), lastsentdata(blocksize + CONTROLBYTES), ackbuffer(blocksize), readTimeoutTimer(remoteConnSocket.get_executor()), mOperationDoneCallback(OperationDoneCallback)
 {
     if(!remoteConnSocket.is_open())
     {
@@ -21,8 +21,8 @@ Tftpsender::Tftpsender(boost::asio::ip::udp::socket &&INsocket, const std::strin
 
 void Tftpsender::start()
 {
-    std::ifstream ifs(filename);
-    if(!ifs)
+    //std::ifstream ifs(filename);
+    if(!(input))
     {
         sendErrorMsg(1, "Requested file not found");
         //TODO: what errorcode to set?
@@ -48,14 +48,14 @@ void Tftpsender::sendNextBlock()
 {
     //Start with block 1 of data, then keep sending new block whenever ack for that block comes
     //Resend last block after timeout
-    std::ifstream ifs(filename, std::ios_base::binary);
-    ifs.seekg((lastsentdatacount - 1) * blocksize);
-    if(ifs)
+    //std::ifstream ifs(filename, std::ios_base::binary);
+    input->seekg((lastsentdatacount - 1) * blocksize);
+    if(input)
     {
         lastsentdata.assign(lastsentdata.size(), 0);
-        ifs.read(lastsentdata.data() + CONTROLBYTES, blocksize);
+        input->read(lastsentdata.data() + CONTROLBYTES, blocksize);
     }
-    auto readbytes = ifs.gcount();
+    auto readbytes = input->gcount();
     if(!sendingdone)
     {
         *reinterpret_cast<uint16_t*>(lastsentdata.data()) = htons(3);

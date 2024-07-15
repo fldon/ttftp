@@ -14,7 +14,7 @@ class TftpReceiver: public std::enable_shared_from_this<TftpReceiver>
 public:
     //Ctor if remote endpoint is known (for server use)
     TftpReceiver(boost::asio::ip::udp::socket &&INsocket,
-        const std::string &filename,
+        std::shared_ptr<std::ostream> outputstream,
         TftpMode mode,
         const boost::asio::ip::address &remoteaddress,
         uint16_t port,
@@ -23,7 +23,7 @@ public:
 
     //Ctor if remote endpoint is not known yet (for client use)
     TftpReceiver(boost::asio::ip::udp::socket &&INsocket,
-        const std::string &filename,
+        std::shared_ptr<std::ostream> outputstream,
         TftpMode mode,
         std::function<void(std::shared_ptr<TftpReceiver>, boost::system::error_code)> OperationDoneCallback = [](std::shared_ptr<TftpReceiver>, boost::system::error_code){},
         std::size_t blocksize = 512);
@@ -59,6 +59,8 @@ private:
     boost::asio::ip::udp::endpoint mSenderEndpoint;
     bool isConnected = false;
     bool operationEnded = false;
+
+    std::shared_ptr<std::ostream> output;
 };
 
 #endif // TFTPRECEIVER_H

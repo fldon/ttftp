@@ -3,6 +3,7 @@
 #include "tftpreceiver.h"
 #include "tftphelpdefs.h"
 #include <iostream>
+#include <fstream>
 
 /*
  * General behavior:
@@ -87,7 +88,10 @@ void TftpServer::HandleSubRequest_RRQ()
 
     boost::asio::ip::udp::socket newsock(mStrand, boost::asio::ip::udp::v4());
     //Tftpsender sender(std::move(newsock), filename_to_read, mode, remoteaddress, remoteport, DEFAULT_BLOCKSIZE);
-    std::shared_ptr<Tftpsender> sender = std::make_shared<Tftpsender>(std::move(newsock), filename_to_read, str2mode(mode), remoteaddress, remoteport, std::bind(&TftpServer::removeSenderFromList, this, std::placeholders::_1), DEFAULT_BLOCKSIZE);
+
+    std::shared_ptr<std::istream> ifs(new std::ifstream(filename_to_read, std::ios_base::binary));
+
+    std::shared_ptr<Tftpsender> sender = std::make_shared<Tftpsender>(std::move(newsock), ifs, str2mode(mode), remoteaddress, remoteport, std::bind(&TftpServer::removeSenderFromList, this, std::placeholders::_1), DEFAULT_BLOCKSIZE);
     mSenderList.push_back(sender);
     sender->start();
 }
@@ -104,7 +108,10 @@ void TftpServer::HandleSubRequest_WRQ()
     boost::asio::ip::address remoteaddress = currAccEndpoint.address();
 
     boost::asio::ip::udp::socket newsock(mStrand, boost::asio::ip::udp::v4());
-    std::shared_ptr<TftpReceiver> receiver = std::make_shared<TftpReceiver>(std::move(newsock), filename_to_write, str2mode(mode), remoteaddress, remoteport, std::bind(&TftpServer::removeReceiverFromList, this, std::placeholders::_1) ,DEFAULT_BLOCKSIZE);
+
+    std::shared_ptr<std::ostream> ofs(new std::ofstream(filename_to_write, std::ios_base::binary | std::ios_base::app));
+
+    std::shared_ptr<TftpReceiver> receiver = std::make_shared<TftpReceiver>(std::move(newsock), ofs, str2mode(mode), remoteaddress, remoteport, std::bind(&TftpServer::removeReceiverFromList, this, std::placeholders::_1) ,DEFAULT_BLOCKSIZE);
     mReceiverList.push_back(receiver);
     receiver->start();
 }

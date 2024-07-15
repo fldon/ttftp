@@ -12,7 +12,7 @@ using namespace testing;
 
 static constexpr unsigned int NUM_OF_BLOCKS = 5;
 
-static std::function<void(std::shared_ptr<TftpReceiver>)> dummyCallback = [] (std::shared_ptr<TftpReceiver>) {};
+static std::function<void(std::shared_ptr<TftpReceiver>, boost::system::error_code)> dummyCallback = [] (std::shared_ptr<TftpReceiver>, boost::system::error_code) {};
 
 //Test if the first Ack after connection establishment is ACK # 0 (server case)
 //TODO: But this should only be the case for the server! The client receives block 1 after establishment! These two cases are handled via different constructors, so test both!
@@ -37,46 +37,24 @@ TEST(TTFTPreceiver, firstAckAfterStart_0)
     uint16_t receiverTestPort = 45043;
     boost::asio::ip::udp::endpoint receiverEndpoint(boost::asio::ip::udp::v4(), receiverTestPort);
     boost::asio::ip::udp::socket receiverSock(testIoContext, receiverEndpoint);
-/*
-    EXPECT_THROW(
-        {
-            std::shared_ptr<TftpReceiver> testReceiver = std::make_shared<TftpReceiver>(std::move(receiverSock), testfilenametowrite, str2mode(testmode), boost::asio::ip::make_address("127.0.0.1"), testport, dummyCallback);
-            testReceiver->start();
 
+    std::shared_ptr<std::ostream> ofs(new std::ofstream(testfilenametowrite, std::ios_base::binary | std::ios_base::app));
 
+    std::shared_ptr<TftpReceiver> testReceiver = std::make_shared<TftpReceiver>(std::move(receiverSock), ofs, str2mode(testmode), boost::asio::ip::make_address("127.0.0.1"), testport, dummyCallback);
+    //testReceiver->start();
+    std::vector<char> buffer(512, 0);
+    //buffer.fill(0);
+    boost::asio::ip::udp::endpoint localsenderendpoint;
+    std::thread t2([&testReceiver] () {sleep(5); testReceiver->start();});
+    testRemoteConnSocket.receive_from(boost::asio::buffer(buffer, buffer.size()), localsenderendpoint);
+    std::thread t([&testIoContext] () {testIoContext.run();});
+    bool equalControlInfo = ntohs(*reinterpret_cast<uint16_t*>(buffer.data())) == static_cast<uint16_t>(TftpOpcode::ACK);
+    bool equalACK = ntohs(*reinterpret_cast<uint16_t*>(buffer.data() + CONTROLBYTES/2)) == 0;
+    EXPECT_EQ(equalControlInfo, true);
+    EXPECT_EQ(equalACK, true);
+    t.join();
+    t2.join();
 
-            //TODO: Check if buffer has correct ACK and Control bytes
-            std::array<char, 512> buffer;
-            buffer.fill(0);
-            boost::asio::ip::udp::endpoint localsenderendpoint;
-            testRemoteConnSocket.receive_from(boost::asio::buffer(buffer, buffer.size()), localsenderendpoint);
-            std::thread t([&testIoContext] () {testIoContext.run();});
-            //(mStrand, filename_to_read, mode, remoteaddress, port, DEFAULT_BLOCKSIZE
-            bool equalControlInfo = ntohs(*reinterpret_cast<uint16_t*>(buffer.data())) == static_cast<uint16_t>(TftpOpcode::ACK);
-            bool equalACK = ntohs(*reinterpret_cast<uint16_t*>(buffer.data() + CONTROLBYTES/2)) == 0;
-            EXPECT_EQ(equalControlInfo, true);
-            EXPECT_EQ(equalACK, true);
-        },
-        std::runtime_error        );
-*/
-
-    EXPECT_ANY_THROW(
-        {
-            std::shared_ptr<TftpReceiver> testReceiver = std::make_shared<TftpReceiver>(std::move(receiverSock), testfilenametowrite, str2mode(testmode), boost::asio::ip::make_address("127.0.0.1"), testport, dummyCallback);
-            //testReceiver->start();
-            std::vector<char> buffer(512, 0);
-            //buffer.fill(0);
-            boost::asio::ip::udp::endpoint localsenderendpoint;
-            std::thread t2([&testReceiver] () {sleep(5); testReceiver->start();});
-            testRemoteConnSocket.receive_from(boost::asio::buffer(buffer, buffer.size()), localsenderendpoint);
-            std::thread t([&testIoContext] () {testIoContext.run();});
-            bool equalControlInfo = ntohs(*reinterpret_cast<uint16_t*>(buffer.data())) == static_cast<uint16_t>(TftpOpcode::ACK);
-            bool equalACK = ntohs(*reinterpret_cast<uint16_t*>(buffer.data() + CONTROLBYTES/2)) == 0;
-            EXPECT_EQ(equalControlInfo, true);
-            EXPECT_EQ(equalACK, true);
-            t.join();
-            t2.join();
-        });
 }
 
 //Test client case: first ack after establishment is nr. 1
@@ -103,7 +81,9 @@ TEST(TTFTPreceiver, firstAckAfterStart_1)
     boost::asio::ip::udp::endpoint receiverEndpoint(boost::asio::ip::udp::v4(), receiverTestPort);
     boost::asio::ip::udp::socket receiverSock(testIoContext, receiverEndpoint);
 
-    std::shared_ptr<TftpReceiver> testReceiver = std::make_shared<TftpReceiver>(std::move(receiverSock), testfilenametowrite, str2mode(testmode), dummyCallback);
+    std::shared_ptr<std::ostream> ofs(new std::ofstream(testfilenametowrite, std::ios_base::binary | std::ios_base::app));
+
+    std::shared_ptr<TftpReceiver> testReceiver = std::make_shared<TftpReceiver>(std::move(receiverSock), ofs, str2mode(testmode), dummyCallback);
     testReceiver->start();
 
 
@@ -168,7 +148,10 @@ TEST(TTFTPreceiver, lastblockAckHalfFilled)
     uint16_t receiverTestPort = 45043;
     boost::asio::ip::udp::endpoint receiverEndpoint(boost::asio::ip::udp::v4(), receiverTestPort);
     boost::asio::ip::udp::socket receiverSock(testIoContext, receiverEndpoint);
-    std::shared_ptr<TftpReceiver> testReceiver = std::make_shared<TftpReceiver>(std::move(receiverSock), testfilenametowrite, str2mode(testmode), testRemoteEndpoint.address(), testport, dummyCallback);
+
+    std::shared_ptr<std::ostream> ofs(new std::ofstream(testfilenametowrite, std::ios_base::binary | std::ios_base::app));
+
+    std::shared_ptr<TftpReceiver> testReceiver = std::make_shared<TftpReceiver>(std::move(receiverSock), ofs, str2mode(testmode), testRemoteEndpoint.address(), testport, dummyCallback);
     testReceiver->start();
 
     std::thread t([&testIoContext] () {testIoContext.run();});
@@ -234,7 +217,10 @@ TEST(TTFTPreceiver, lastBlockACKFullFilled)
     uint16_t receiverTestPort = 45043;
     boost::asio::ip::udp::endpoint receiverEndpoint(boost::asio::ip::udp::v4(), receiverTestPort);
     boost::asio::ip::udp::socket receiverSock(testIoContext, receiverEndpoint);
-    std::shared_ptr<TftpReceiver> testReceiver = std::make_shared<TftpReceiver>(std::move(receiverSock), testfilenametowrite, str2mode(testmode), testRemoteEndpoint.address(), testport, dummyCallback);
+
+    std::shared_ptr<std::ostream> ofs(new std::ofstream(testfilenametowrite, std::ios_base::binary | std::ios_base::app));
+
+    std::shared_ptr<TftpReceiver> testReceiver = std::make_shared<TftpReceiver>(std::move(receiverSock), ofs, str2mode(testmode), testRemoteEndpoint.address(), testport, dummyCallback);
     testReceiver->start();
 
     std::thread t([&testIoContext] () {testIoContext.run();});
@@ -300,7 +286,10 @@ TEST(TTFTPreceiver, lastBlockACKHalfFilled)
     uint16_t receiverTestPort = 45043;
     boost::asio::ip::udp::endpoint receiverEndpoint(boost::asio::ip::udp::v4(), receiverTestPort);
     boost::asio::ip::udp::socket receiverSock(testIoContext, receiverEndpoint);
-    std::shared_ptr<TftpReceiver> testReceiver = std::make_shared<TftpReceiver>(std::move(receiverSock), testfilenametowrite, str2mode(testmode), testRemoteEndpoint.address(), testport, dummyCallback);
+
+    std::shared_ptr<std::ostream> ofs(new std::ofstream(testfilenametowrite, std::ios_base::binary | std::ios_base::app));
+
+    std::shared_ptr<TftpReceiver> testReceiver = std::make_shared<TftpReceiver>(std::move(receiverSock), ofs, str2mode(testmode), testRemoteEndpoint.address(), testport, dummyCallback);
 
     testReceiver->start();
 
@@ -367,7 +356,10 @@ TEST(TTFTPreceiver, outputFileCorrectHalfFilledLast)
     uint16_t receiverTestPort = 45043;
     boost::asio::ip::udp::endpoint receiverEndpoint(boost::asio::ip::udp::v4(), receiverTestPort);
     boost::asio::ip::udp::socket receiverSock(testIoContext, receiverEndpoint);
-    std::shared_ptr<TftpReceiver> testReceiver = std::make_shared<TftpReceiver>(std::move(receiverSock), testfilenametowrite, str2mode(testmode), testRemoteEndpoint.address(), testport, dummyCallback);
+
+    std::shared_ptr<std::ostream> ofs(new std::ofstream(testfilenametowrite, std::ios_base::binary | std::ios_base::app));
+
+    std::shared_ptr<TftpReceiver> testReceiver = std::make_shared<TftpReceiver>(std::move(receiverSock), ofs, str2mode(testmode), testRemoteEndpoint.address(), testport, dummyCallback);
     testReceiver->start();
 
     std::thread t([&testIoContext] () {testIoContext.run();});
@@ -447,7 +439,10 @@ TEST(TTFTPreceiver, outputFileCorrectFullFilledLast)
     uint16_t receiverTestPort = 45043;
     boost::asio::ip::udp::endpoint receiverEndpoint(boost::asio::ip::udp::v4(), receiverTestPort);
     boost::asio::ip::udp::socket receiverSock(testIoContext, receiverEndpoint);
-    std::shared_ptr<TftpReceiver> testReceiver = std::make_shared<TftpReceiver>(std::move(receiverSock), testfilenametowrite, str2mode(testmode), testRemoteEndpoint.address(), testport, dummyCallback);
+
+    std::shared_ptr<std::ostream> ofs(new std::ofstream(testfilenametowrite, std::ios_base::binary | std::ios_base::app));
+
+    std::shared_ptr<TftpReceiver> testReceiver = std::make_shared<TftpReceiver>(std::move(receiverSock), ofs, str2mode(testmode), testRemoteEndpoint.address(), testport, dummyCallback);
     testReceiver->start();
 
     std::thread t([&testIoContext] () {testIoContext.run();});
@@ -527,7 +522,10 @@ TEST(TTFTPreceiver, ACKresentAtOldDataBlock)
     uint16_t receiverTestPort = 45043;
     boost::asio::ip::udp::endpoint receiverEndpoint(boost::asio::ip::udp::v4(), receiverTestPort);
     boost::asio::ip::udp::socket receiverSock(testIoContext, receiverEndpoint);
-    std::shared_ptr<TftpReceiver> testReceiver = std::make_shared<TftpReceiver>(std::move(receiverSock), testfilenametowrite, str2mode(testmode), testRemoteEndpoint.address(), testport, dummyCallback);
+
+    std::shared_ptr<std::ostream> ofs(new std::ofstream(testfilenametowrite, std::ios_base::binary | std::ios_base::app));
+
+    std::shared_ptr<TftpReceiver> testReceiver = std::make_shared<TftpReceiver>(std::move(receiverSock), ofs, str2mode(testmode), testRemoteEndpoint.address(), testport, dummyCallback);
     testReceiver->start();
 
     std::thread t([&testIoContext] () {testIoContext.run();});
@@ -597,7 +595,10 @@ TEST(TTFTPreceiver, ErrorOnDataBlockIDTooLarge)
     uint16_t receiverTestPort = 45043;
     boost::asio::ip::udp::endpoint receiverEndpoint(boost::asio::ip::udp::v4(), receiverTestPort);
     boost::asio::ip::udp::socket receiverSock(testIoContext, receiverEndpoint);
-    std::shared_ptr<TftpReceiver> testReceiver = std::make_shared<TftpReceiver>(std::move(receiverSock), testfilenametowrite, str2mode(testmode), testRemoteEndpoint.address(), testport, dummyCallback);
+
+    std::shared_ptr<std::ostream> ofs(new std::ofstream(testfilenametowrite, std::ios_base::binary | std::ios_base::app));
+
+    std::shared_ptr<TftpReceiver> testReceiver = std::make_shared<TftpReceiver>(std::move(receiverSock), ofs, str2mode(testmode), testRemoteEndpoint.address(), testport, dummyCallback);
     testReceiver->start();
 
     std::thread t([&testIoContext] () {testIoContext.run();});
@@ -669,7 +670,10 @@ TEST(TTFTPreceiver, ACKResentOnTimeout)
     uint16_t receiverTestPort = 45043;
     boost::asio::ip::udp::endpoint receiverEndpoint(boost::asio::ip::udp::v4(), receiverTestPort);
     boost::asio::ip::udp::socket receiverSock(testIoContext, receiverEndpoint);
-    std::shared_ptr<TftpReceiver> testSender = std::make_shared<TftpReceiver>(std::move(receiverSock), testfilenametoread, str2mode(testmode), testRemoteEndpoint.address(), testport, dummyCallback);
+
+    std::shared_ptr<std::ostream> ofs(new std::ofstream(testfilenametoread, std::ios_base::binary | std::ios_base::app));
+
+    std::shared_ptr<TftpReceiver> testSender = std::make_shared<TftpReceiver>(std::move(receiverSock), ofs, str2mode(testmode), testRemoteEndpoint.address(), testport, dummyCallback);
     testSender->start();
     std::thread t([&testIoContext] () {testIoContext.run();});
 
@@ -734,7 +738,10 @@ TEST(TTFTPreceiver, ConnectioncloseAfterTimeouts)
     uint16_t receiverTestPort = 45043;
     boost::asio::ip::udp::endpoint receiverEndpoint(boost::asio::ip::udp::v4(), receiverTestPort);
     boost::asio::ip::udp::socket receiverSock(testIoContext, receiverEndpoint);
-    std::shared_ptr<TftpReceiver> testSender = std::make_shared<TftpReceiver>(std::move(receiverSock), testfilenametoread, str2mode(testmode), testRemoteEndpoint.address(), testport, dummyCallback);
+
+    std::shared_ptr<std::ostream> ofs(new std::ofstream(testfilenametoread, std::ios_base::binary | std::ios_base::app));
+
+    std::shared_ptr<TftpReceiver> testSender = std::make_shared<TftpReceiver>(std::move(receiverSock), ofs, str2mode(testmode), testRemoteEndpoint.address(), testport, dummyCallback);
     testSender->start();
     std::thread t([&testIoContext] () {testIoContext.run();});
 
