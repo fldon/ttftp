@@ -99,7 +99,16 @@ void Tftpsender::checkAckForLastBlock(boost::system::error_code err, std::size_t
             {
                 lastsentdatacount++;
                 timeoutcount = 0;
-                sendNextBlock();
+
+                //Received ACK for last block:
+                if(sendingdone)
+                {
+                    endOperation();
+                }
+                else
+                {
+                    sendNextBlock();
+                }
             }
             else if(ack_block > lastsentdatacount)
             {
