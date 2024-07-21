@@ -141,7 +141,7 @@ void TftpClient::start(boost::asio::ip::address server_address, TftpOpcode reque
         //Sender is constructed without knowing remote endpoint of server - it will receive the first ACK for block 0, or time out
         std::string filepath_to_read = mRootfolder + filename; //get full path
 
-        std::shared_ptr<std::istream> ifs(new std::ifstream(filepath_to_read, std::ios_base::binary));
+        std::shared_ptr<std::istream> ifs = std::make_shared<std::ifstream>(filepath_to_read, std::ios_base::binary);
 
         std::shared_ptr<Tftpsender> sender = std::make_shared<Tftpsender>(std::move(sock), ifs, transfermode, std::bind(&TftpClient::on_sender_done, this, std::placeholders::_1, std::placeholders::_2) ,DEFAULT_BLOCKSIZE);
         mTransfer_running = true;

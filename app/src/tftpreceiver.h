@@ -19,14 +19,14 @@ public:
         const boost::asio::ip::address &remoteaddress,
         uint16_t port,
         std::function<void(std::shared_ptr<TftpReceiver>, boost::system::error_code err)> OperationDoneCallback = [](std::shared_ptr<TftpReceiver>, boost::system::error_code){},
-        std::size_t blocksize = 512);
+        std::size_t blocksize = DEFAULT_BLOCKSIZE);
 
     //Ctor if remote endpoint is not known yet (for client use)
     TftpReceiver(boost::asio::ip::udp::socket &&INsocket,
         std::shared_ptr<std::ostream> outputstream,
         TftpMode mode,
         std::function<void(std::shared_ptr<TftpReceiver>, boost::system::error_code)> OperationDoneCallback = [](std::shared_ptr<TftpReceiver>, boost::system::error_code){},
-        std::size_t blocksize = 512);
+        std::size_t blocksize = DEFAULT_BLOCKSIZE);
 
     void start();
 private:

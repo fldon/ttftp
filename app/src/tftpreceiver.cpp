@@ -15,7 +15,7 @@ TftpReceiver::TftpReceiver(boost::asio::ip::udp::socket &&INsocket,
     TftpMode INmode,
     std::function<void(std::shared_ptr<TftpReceiver>, boost::system::error_code)> INoperationDoneCallback,
     std::size_t INblocksize)
-    :output(outputstream), blocksize(INblocksize), remoteConnSocket(std::move(INsocket)), lastsentack(blocksize), databuffer(blocksize + CONTROLBYTES), readTimeoutTimer(remoteConnSocket.get_executor()), mOperationDoneCallback(INoperationDoneCallback)
+    :blocksize(INblocksize), remoteConnSocket(std::move(INsocket)), lastsentack(blocksize), databuffer(blocksize + CONTROLBYTES), readTimeoutTimer(remoteConnSocket.get_executor()), mOperationDoneCallback(INoperationDoneCallback), output(outputstream)
 {
     if(!remoteConnSocket.is_open())
     {
