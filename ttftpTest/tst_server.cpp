@@ -47,6 +47,8 @@ TEST(TTFTPServer, ServerStartsRRQConn)
     boost::asio::ip::udp::endpoint testRemoteEndpoint(boost::asio::ip::udp::v4(), testport); //endpoint to server for request
     boost::asio::ip::udp::socket testRemoteConnSocket(testIoContext, testRemoteEndpoint);
 
+    //Remove test file if it already exists
+    std::remove(filename.c_str());
 
     //fill testfile
     std::vector<char> ofsinput;
@@ -62,8 +64,6 @@ TEST(TTFTPServer, ServerStartsRRQConn)
     }
 
     boost::asio::ip::udp::endpoint localsenderendpoint; //endpoint from server after request is received
-
-
 
     //start server
     TftpServer server("", testIoContext); //rootfolder is just rootfolder of test
@@ -137,6 +137,9 @@ TEST(TTFTPServer, ServerStartsWRQConn)
     boost::asio::ip::udp::endpoint testRemoteEndpoint(boost::asio::ip::udp::v4(), testport); //endpoint to server for request
     boost::asio::ip::udp::socket testRemoteConnSocket(testIoContext, testRemoteEndpoint);
 
+
+    //Remove test file if it already exists
+    std::remove(filename.c_str());
 
     //fill testfile
     std::vector<char> ofsinput;

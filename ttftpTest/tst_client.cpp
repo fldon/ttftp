@@ -2,6 +2,7 @@
 #include <gtest/gtest.h>
 
 #include "tftpclient.h"
+#include <cstdio>
 
 using namespace testing;
 using namespace std::chrono_literals;
@@ -13,6 +14,8 @@ TEST(TTFTPClient, CorrectRRQ)
     //mode-string is for now "octet", nothing else is supported
     std::vector<char> RRQmsg(sizeof(uint16_t));
     uint16_t opcode = static_cast<uint16_t>(TftpOpcode::RRQ);
+
+
 
     std::string filename = "RRQWriteTestFile.txt";
     std::string mode = "octet";
@@ -53,6 +56,11 @@ TEST(TTFTPClient, CorrectRRQ)
     std::future<std::size_t> my_future =
         testMockServerConnSocket.async_receive_from(boost::asio::buffer(buffer, buffer.size()), clientEndpoint, boost::asio::use_future);
     std::thread t([&testIoContext] () {testIoContext.run();});
+
+
+    //Remove test file if it already exists
+    std::remove(filename.c_str());
+
     client.start(boost::asio::ip::make_address("127.0.0.1"), TftpOpcode::RRQ, filename);
     auto futurestatus = my_future.wait_for(15s);
     if(futurestatus == std::future_status::timeout)
@@ -116,6 +124,10 @@ TEST(TTFTPClient, CorrectWRQ)
     std::future<std::size_t> my_future =
         testMockServerConnSocket.async_receive_from(boost::asio::buffer(buffer, buffer.size()), clientEndpoint, boost::asio::use_future);
     std::thread t([&testIoContext] () {testIoContext.run();});
+
+    //Remove test file if it already exists
+    std::remove(filename.c_str());
+
     client.start(boost::asio::ip::make_address("127.0.0.1"), TftpOpcode::WRQ, filename);
     auto futurestatus = my_future.wait_for(15s);
     if(futurestatus == std::future_status::timeout)
