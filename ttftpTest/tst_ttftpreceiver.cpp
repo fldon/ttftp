@@ -15,14 +15,12 @@ static constexpr unsigned int NUM_OF_BLOCKS = 5;
 static std::function<void(std::shared_ptr<TftpReceiver>, boost::system::error_code)> dummyCallback = [] (std::shared_ptr<TftpReceiver>, boost::system::error_code) {};
 
 //Test if the first Ack after connection establishment is ACK # 0 (server case)
-//TODO: But this should only be the case for the server! The client receives block 1 after establishment! These two cases are handled via different constructors, so test both!
 TEST(TTFTPreceiver, firstAckAfterStart_0)
 {
     boost::asio::io_context testIoContext;
     uint16_t testport = 45042;
     boost::asio::ip::udp::endpoint testRemoteEndpoint(boost::asio::ip::udp::v4(), testport);
     boost::asio::ip::udp::socket testRemoteConnSocket(testIoContext, testRemoteEndpoint);
-    std::string testfilenametowrite = "testfileReceiver.txt";
 
 
     //fill testfile
@@ -38,22 +36,43 @@ TEST(TTFTPreceiver, firstAckAfterStart_0)
     boost::asio::ip::udp::endpoint receiverEndpoint(boost::asio::ip::udp::v4(), receiverTestPort);
     boost::asio::ip::udp::socket receiverSock(testIoContext, receiverEndpoint);
 
-    std::shared_ptr<std::ostream> ofs(new std::ofstream(testfilenametowrite, std::ios_base::binary | std::ios_base::app));
+    std::shared_ptr<std::ostream> ofs = std::make_shared<std::ostringstream>(std::ios_base::binary | std::ios_base::app);
 
+
+
+
+
+
+
+    //Server Case of receiver: Knows IP of remote host, so will send ACK 0 before receiving anything
     std::shared_ptr<TftpReceiver> testReceiver = std::make_shared<TftpReceiver>(std::move(receiverSock), ofs, str2mode(testmode), boost::asio::ip::make_address("127.0.0.1"), testport, dummyCallback);
-    //testReceiver->start();
+
     std::vector<char> buffer(512, 0);
-    //buffer.fill(0);
     boost::asio::ip::udp::endpoint localsenderendpoint;
-    std::thread t2([&testReceiver] () {sleep(5); testReceiver->start();});
-    testRemoteConnSocket.receive_from(boost::asio::buffer(buffer, buffer.size()), localsenderendpoint);
+    //Easiest way seems to be to use an async wait with a future, and to call wait on that future: that timeout can then be used to say "connection was closed"
+    std::future<std::size_t> my_future =
+        testRemoteConnSocket.async_receive_from(boost::asio::buffer(buffer, buffer.size()), localsenderendpoint, boost::asio::use_future);
+
+    testReceiver->start();
+
     std::thread t([&testIoContext] () {testIoContext.run();});
-    bool equalControlInfo = ntohs(*reinterpret_cast<uint16_t*>(buffer.data())) == static_cast<uint16_t>(TftpOpcode::ACK);
-    bool equalACK = ntohs(*reinterpret_cast<uint16_t*>(buffer.data() + CONTROLBYTES/2)) == 0;
-    EXPECT_EQ(equalControlInfo, true);
-    EXPECT_EQ(equalACK, true);
+
+    auto futurestatus = my_future.wait_for(RETRANSMISSION_TIME * 2s);
+    if(futurestatus == std::future_status::timeout)
+    {
+        //Timeout should not happen here
+        EXPECT_EQ(true,false);
+        testRemoteConnSocket.close();
+    }
+    else
+    {
+        bool equalControlInfo = ntohs(*reinterpret_cast<uint16_t*>(buffer.data())) == static_cast<uint16_t>(TftpOpcode::ACK);
+        bool equalACK = ntohs(*reinterpret_cast<uint16_t*>(buffer.data() + CONTROLBYTES/2)) == 0;
+        EXPECT_EQ(equalControlInfo, true);
+        EXPECT_EQ(equalACK, true);
+    }
+
     t.join();
-    t2.join();
 
 }
 
@@ -64,6 +83,165 @@ TEST(TTFTPreceiver, firstAckAfterStart_1)
     uint16_t testport = 45042;
     boost::asio::ip::udp::endpoint testRemoteEndpoint(boost::asio::ip::udp::v4(), testport);
     boost::asio::ip::udp::socket testRemoteConnSocket(testIoContext, testRemoteEndpoint);
+    //fill testfile
+    std::vector<char> ofsinput;
+    for(uint16_t i = 1; i <= 512 * NUM_OF_BLOCKS; ++i)
+    {
+        ofsinput.push_back(rand());
+    }
+
+    std::string testmode = "octet";
+
+    uint16_t receiverTestPort = 45043;
+    boost::asio::ip::udp::endpoint receiverEndpoint(boost::asio::ip::udp::v4(), receiverTestPort);
+    boost::asio::ip::udp::socket receiverSock(testIoContext, receiverEndpoint);
+
+    std::shared_ptr<std::ostream> ofs = std::make_shared<std::ostringstream>(std::ios_base::binary | std::ios_base::app);
+
+
+
+
+    //Client case of receiver: Does not know IP, so will wait until it receives block 1 before sending ACK
+    std::shared_ptr<TftpReceiver> testReceiver = std::make_shared<TftpReceiver>(std::move(receiverSock), ofs, str2mode(testmode), dummyCallback);
+    testReceiver->start();
+
+
+    std::thread t([&testIoContext] () {testIoContext.run();});
+
+
+    //fill buffer with first data block from ofsinput and sent message, expecting the correct ACK
+    std::array<char, 512> buffer;
+    buffer.fill(0);
+    uint16_t blockcount = 1;
+    //fill and send current block from ofsinout before reading ACK
+    std::array<char, 512 + CONTROLBYTES> sendbuffer;
+    sendbuffer.fill(0);
+    *reinterpret_cast<uint16_t*>(sendbuffer.data()) = htons(static_cast<uint16_t>(TftpOpcode::DATA));
+    *reinterpret_cast<uint16_t*>(sendbuffer.data() + CONTROLBYTES/2) = htons(blockcount);
+
+    std::size_t blockbytes = 0;
+    for(std::size_t idx = (blockcount - 1) * 512; idx < ofsinput.size() && idx < (blockcount * 512); idx++)
+    {
+        *reinterpret_cast<char*>(sendbuffer.data() + idx - (blockcount - 1) * 512 + CONTROLBYTES) = ofsinput.at(idx);
+        blockbytes++;
+    }
+
+    testRemoteConnSocket.send_to(boost::asio::buffer(sendbuffer, CONTROLBYTES + blockbytes), receiverEndpoint);
+
+    buffer.fill(0);
+
+    std::future<std::size_t> my_future =
+        testRemoteConnSocket.async_receive_from(boost::asio::buffer(buffer, buffer.size()), receiverEndpoint, boost::asio::use_future);
+
+    auto futurestatus = my_future.wait_for(RETRANSMISSION_TIME * 2s);
+    if(futurestatus == std::future_status::timeout)
+    {
+        //Timeout should not happen here
+        EXPECT_EQ(true,false);
+        testRemoteConnSocket.close();
+    }
+    else
+    {
+        //(mStrand, filename_to_read, mode, remoteaddress, port, DEFAULT_BLOCKSIZE
+        bool equalControlInfo = ntohs(*reinterpret_cast<uint16_t*>(buffer.data())) == static_cast<uint16_t>(TftpOpcode::ACK);
+        bool equalACK = ntohs(*reinterpret_cast<uint16_t*>(buffer.data() + CONTROLBYTES/2)) == blockcount;
+        EXPECT_EQ(equalControlInfo, true);
+        EXPECT_EQ(equalACK, true);
+    }
+    t.join();
+}
+
+
+//Test if correct number of ACKs is sent, in the server case (address of remote host is known, first ACK is 0), when last block is not full
+TEST(TTFTPreceiver, lastblockAckHalfFilled_Server)
+{
+    boost::asio::io_context testIoContext;
+    uint16_t testport = 45042;
+    boost::asio::ip::udp::endpoint testRemoteEndpoint(boost::asio::ip::udp::v4(), testport);
+    boost::asio::ip::udp::socket testRemoteConnSocket(testIoContext, testRemoteEndpoint);
+    std::string testfilenametowrite = "testfileReceiver.txt";
+
+
+    //fill testfile
+    std::vector<char> ofsinput;
+    for(uint16_t i = 1; i <= 512 * NUM_OF_BLOCKS + 64; ++i)
+    {
+        ofsinput.push_back(rand());
+    }
+
+    std::string testmode = "octet";
+
+    uint16_t receiverTestPort = 45043;
+    boost::asio::ip::udp::endpoint receiverEndpoint(boost::asio::ip::udp::v4(), receiverTestPort);
+    boost::asio::ip::udp::socket receiverSock(testIoContext, receiverEndpoint);
+
+    std::shared_ptr<std::ostream> ofs = std::make_shared<std::ostringstream>(std::ios_base::binary | std::ios_base::app);
+
+    std::shared_ptr<TftpReceiver> testReceiver = std::make_shared<TftpReceiver>(std::move(receiverSock), ofs, str2mode(testmode), boost::asio::ip::make_address("127.0.0.1"), testport, dummyCallback);
+
+
+
+
+    //fill buffer with each data block from ofsinput and sent messages till all data blocks are exhausted
+    boost::asio::ip::udp::endpoint localsenderendpoint;
+    std::array<char, 512> buffer;
+
+    std::future<std::size_t> my_future =
+        testRemoteConnSocket.async_receive_from(boost::asio::buffer(buffer, buffer.size()), localsenderendpoint, boost::asio::use_future); //First ACK
+
+    testReceiver->start();
+
+    std::thread t([&testIoContext] () {testIoContext.run();});
+    auto futurestatus = my_future.wait_for(RETRANSMISSION_TIME * 2s);
+    if(futurestatus == std::future_status::timeout)
+    {
+        //Timeout should not happen here
+        EXPECT_EQ(true,false);
+        testRemoteConnSocket.close();
+    }
+    bool correct_server_ACK = ntohs(*reinterpret_cast<uint16_t*>(buffer.data() + CONTROLBYTES/2)) == 0;
+    EXPECT_EQ(correct_server_ACK, true);
+
+    buffer.fill(0);
+    uint16_t blockcount = 1;
+    while(blockcount * 512 < ofsinput.size() + 512)
+    {
+        //fill and send current block from ofsinout before reading ACK
+        std::array<char, 512 + CONTROLBYTES> sendbuffer;
+        sendbuffer.fill(0);
+        *reinterpret_cast<uint16_t*>(sendbuffer.data()) = htons(static_cast<uint16_t>(TftpOpcode::DATA));
+        *reinterpret_cast<uint16_t*>(sendbuffer.data() + CONTROLBYTES/2) = htons(blockcount);
+
+        std::size_t blockbytes = 0;
+        for(std::size_t idx = (blockcount - 1) * 512; idx < ofsinput.size() && idx < (blockcount * 512); idx++)
+        {
+            *reinterpret_cast<char*>(sendbuffer.data() + idx - (blockcount - 1) * 512 + CONTROLBYTES) = ofsinput.at(idx);
+            blockbytes++;
+        }
+
+        testRemoteConnSocket.send_to(boost::asio::buffer(sendbuffer, CONTROLBYTES + blockbytes), localsenderendpoint);
+
+        buffer.fill(0);
+        testRemoteConnSocket.receive_from(boost::asio::buffer(buffer, buffer.size()), localsenderendpoint);
+        //(mStrand, filename_to_read, mode, remoteaddress, port, DEFAULT_BLOCKSIZE
+        bool equalControlInfo = ntohs(*reinterpret_cast<uint16_t*>(buffer.data())) == static_cast<uint16_t>(TftpOpcode::ACK);
+        bool equalACK = ntohs(*reinterpret_cast<uint16_t*>(buffer.data() + CONTROLBYTES/2)) == blockcount;
+        EXPECT_EQ(equalControlInfo, true);
+        EXPECT_EQ(equalACK, true);
+        blockcount++;
+    }
+    blockcount--; //One addition too many in loop
+    t.join();
+    EXPECT_EQ(blockcount, NUM_OF_BLOCKS + 1);
+}
+
+//Test if correct number of ACKs is sent, in the server case (address of remote host is known, first ACK is 0) when last block is full
+TEST(TTFTPreceiver, lastBlockACKFullFilled_Server)
+{
+    boost::asio::io_context testIoContext;
+    uint16_t testport = 45042;
+    boost::asio::ip::udp::endpoint testRemoteEndpoint(boost::asio::ip::udp::v4(), testport);
+    boost::asio::ip::udp::socket testRemoteConnSocket(testIoContext, testRemoteEndpoint);
     std::string testfilenametowrite = "testfileReceiver.txt";
 
 
@@ -76,22 +254,110 @@ TEST(TTFTPreceiver, firstAckAfterStart_1)
 
     std::string testmode = "octet";
 
+    uint16_t receiverTestPort = 45043;
+    boost::asio::ip::udp::endpoint receiverEndpoint(boost::asio::ip::udp::v4(), receiverTestPort);
+    boost::asio::ip::udp::socket receiverSock(testIoContext, receiverEndpoint);
+
+    std::string outputString = "";
+
+    std::shared_ptr<std::ostream> ofs = std::make_shared<std::ostringstream>(std::ios_base::binary | std::ios_base::app);
+
+    std::shared_ptr<TftpReceiver> testReceiver = std::make_shared<TftpReceiver>(std::move(receiverSock), ofs, str2mode(testmode), boost::asio::ip::make_address("127.0.0.1"), testport, dummyCallback);
+
+
+
+
+    //fill buffer with each data block from ofsinput and sent messages till all data blocks are exhausted
+    boost::asio::ip::udp::endpoint localsenderendpoint;
+    std::array<char, 512> buffer;
+
+    std::future<std::size_t> my_future =
+        testRemoteConnSocket.async_receive_from(boost::asio::buffer(buffer, buffer.size()), localsenderendpoint, boost::asio::use_future); //First ACK
+
+    testReceiver->start();
+
+    std::thread t([&testIoContext] () {testIoContext.run();});
+    auto futurestatus = my_future.wait_for(RETRANSMISSION_TIME * 2s);
+    if(futurestatus == std::future_status::timeout)
+    {
+        //Timeout should not happen here
+        EXPECT_EQ(true,false);
+        testRemoteConnSocket.close();
+    }
+    bool correct_server_ACK = ntohs(*reinterpret_cast<uint16_t*>(buffer.data() + CONTROLBYTES/2)) == 0;
+    EXPECT_EQ(correct_server_ACK, true);
+
+    buffer.fill(0);
+    uint16_t blockcount = 1;
+    while(blockcount * 512 < ofsinput.size() + 512)
+    {
+        //fill and send current block from ofsinout before reading ACK
+        std::array<char, 512 + CONTROLBYTES> sendbuffer;
+        sendbuffer.fill(0);
+        *reinterpret_cast<uint16_t*>(sendbuffer.data()) = htons(static_cast<uint16_t>(TftpOpcode::DATA));
+        *reinterpret_cast<uint16_t*>(sendbuffer.data() + CONTROLBYTES/2) = htons(blockcount);
+
+        std::size_t blockbytes = 0;
+        for(std::size_t idx = (blockcount - 1) * 512; idx < ofsinput.size() && idx < (blockcount * 512); idx++)
+        {
+            *reinterpret_cast<char*>(sendbuffer.data() + idx - (blockcount - 1) * 512 + CONTROLBYTES) = ofsinput.at(idx);
+            blockbytes++;
+        }
+
+        testRemoteConnSocket.send_to(boost::asio::buffer(sendbuffer, CONTROLBYTES + blockbytes), localsenderendpoint);
+
+        buffer.fill(0);
+        testRemoteConnSocket.receive_from(boost::asio::buffer(buffer, buffer.size()), localsenderendpoint);
+        //(mStrand, filename_to_read, mode, remoteaddress, port, DEFAULT_BLOCKSIZE
+        bool equalControlInfo = ntohs(*reinterpret_cast<uint16_t*>(buffer.data())) == static_cast<uint16_t>(TftpOpcode::ACK);
+        bool equalACK = ntohs(*reinterpret_cast<uint16_t*>(buffer.data() + CONTROLBYTES/2)) == blockcount;
+        EXPECT_EQ(equalControlInfo, true);
+        EXPECT_EQ(equalACK, true);
+        blockcount++;
+    }
+    blockcount--; //One addition too many in loop
+    t.join();
+    EXPECT_EQ(blockcount, NUM_OF_BLOCKS);
+}
+
+//Test if correct number of ACKs is sent, in the server case (address of remote host is not known, first ACK is 1) when last block is not full
+TEST(TTFTPreceiver, lastBlockACKHalfFilled_Client)
+{
+    boost::asio::io_context testIoContext;
+    uint16_t testport = 45042;
+    boost::asio::ip::udp::endpoint testRemoteEndpoint(boost::asio::ip::udp::v4(), testport);
+    boost::asio::ip::udp::socket testRemoteConnSocket(testIoContext, testRemoteEndpoint);
+    std::string testfilenametowrite = "testfileReceiver.txt";
+
+
+    //fill testfile
+    std::vector<char> ofsinput;
+    for(uint16_t i = 1; i <= 512 * NUM_OF_BLOCKS + 64; ++i)
+    {
+        ofsinput.push_back(rand());
+    }
+
+    std::string testmode = "octet";
 
     uint16_t receiverTestPort = 45043;
     boost::asio::ip::udp::endpoint receiverEndpoint(boost::asio::ip::udp::v4(), receiverTestPort);
     boost::asio::ip::udp::socket receiverSock(testIoContext, receiverEndpoint);
 
-    std::shared_ptr<std::ostream> ofs(new std::ofstream(testfilenametowrite, std::ios_base::binary | std::ios_base::app));
+    std::string outputString = "";
+
+    std::shared_ptr<std::ostream> ofs = std::make_shared<std::ostringstream>(std::ios_base::binary | std::ios_base::app);
 
     std::shared_ptr<TftpReceiver> testReceiver = std::make_shared<TftpReceiver>(std::move(receiverSock), ofs, str2mode(testmode), dummyCallback);
-    testReceiver->start();
 
 
-    std::thread t([&testIoContext] () {testIoContext.run();});
 
 
     //fill buffer with each data block from ofsinput and sent messages till all data blocks are exhausted
+    boost::asio::ip::udp::endpoint localsenderendpoint;
     std::array<char, 512> buffer;
+    testReceiver->start();
+
+    std::thread t([&testIoContext] () {testIoContext.run();});
     buffer.fill(0);
     uint16_t blockcount = 1;
     while(blockcount * 512 < ofsinput.size() + 512)
@@ -112,7 +378,7 @@ TEST(TTFTPreceiver, firstAckAfterStart_1)
         testRemoteConnSocket.send_to(boost::asio::buffer(sendbuffer, CONTROLBYTES + blockbytes), receiverEndpoint);
 
         buffer.fill(0);
-        testRemoteConnSocket.receive_from(boost::asio::buffer(buffer, buffer.size()), receiverEndpoint);
+        testRemoteConnSocket.receive_from(boost::asio::buffer(buffer, buffer.size()), localsenderendpoint);
         //(mStrand, filename_to_read, mode, remoteaddress, port, DEFAULT_BLOCKSIZE
         bool equalControlInfo = ntohs(*reinterpret_cast<uint16_t*>(buffer.data())) == static_cast<uint16_t>(TftpOpcode::ACK);
         bool equalACK = ntohs(*reinterpret_cast<uint16_t*>(buffer.data() + CONTROLBYTES/2)) == blockcount;
@@ -122,12 +388,11 @@ TEST(TTFTPreceiver, firstAckAfterStart_1)
     }
     blockcount--; //One addition too many in loop
     t.join();
-    EXPECT_EQ(blockcount, NUM_OF_BLOCKS);
+    EXPECT_EQ(blockcount, NUM_OF_BLOCKS + 1);
 }
 
-
-//Test if correct number of ACKs is sent
-TEST(TTFTPreceiver, lastblockAckHalfFilled)
+//Test if correct number of ACKs is sent, in the server case (address of remote host is not known, first ACK is 1) when last block is full
+TEST(TTFTPreceiver, lastBlockACKFullFilled_Client)
 {
     boost::asio::io_context testIoContext;
     uint16_t testport = 45042;
@@ -149,19 +414,21 @@ TEST(TTFTPreceiver, lastblockAckHalfFilled)
     boost::asio::ip::udp::endpoint receiverEndpoint(boost::asio::ip::udp::v4(), receiverTestPort);
     boost::asio::ip::udp::socket receiverSock(testIoContext, receiverEndpoint);
 
-    std::shared_ptr<std::ostream> ofs(new std::ofstream(testfilenametowrite, std::ios_base::binary | std::ios_base::app));
+    std::string outputString = "";
 
-    std::shared_ptr<TftpReceiver> testReceiver = std::make_shared<TftpReceiver>(std::move(receiverSock), ofs, str2mode(testmode), testRemoteEndpoint.address(), testport, dummyCallback);
-    testReceiver->start();
+    std::shared_ptr<std::ostream> ofs = std::make_shared<std::ostringstream>(std::ios_base::binary | std::ios_base::app);
 
-    std::thread t([&testIoContext] () {testIoContext.run();});
+    std::shared_ptr<TftpReceiver> testReceiver = std::make_shared<TftpReceiver>(std::move(receiverSock), ofs, str2mode(testmode), dummyCallback);
+
+
 
 
     //fill buffer with each data block from ofsinput and sent messages till all data blocks are exhausted
-
     boost::asio::ip::udp::endpoint localsenderendpoint;
     std::array<char, 512> buffer;
-    testRemoteConnSocket.receive_from(boost::asio::buffer(buffer, buffer.size()), localsenderendpoint); //First ACK
+    testReceiver->start();
+
+    std::thread t([&testIoContext] () {testIoContext.run();});
     buffer.fill(0);
     uint16_t blockcount = 1;
     while(blockcount * 512 < ofsinput.size() + 512)
@@ -179,7 +446,7 @@ TEST(TTFTPreceiver, lastblockAckHalfFilled)
             blockbytes++;
         }
 
-        testRemoteConnSocket.send_to(boost::asio::buffer(sendbuffer, CONTROLBYTES + blockbytes), localsenderendpoint);
+        testRemoteConnSocket.send_to(boost::asio::buffer(sendbuffer, CONTROLBYTES + blockbytes), receiverEndpoint);
 
         buffer.fill(0);
         testRemoteConnSocket.receive_from(boost::asio::buffer(buffer, buffer.size()), localsenderendpoint);
@@ -195,84 +462,13 @@ TEST(TTFTPreceiver, lastblockAckHalfFilled)
     EXPECT_EQ(blockcount, NUM_OF_BLOCKS);
 }
 
-//Test if last block is ACKed correctly, when it is completely filled
-TEST(TTFTPreceiver, lastBlockACKFullFilled)
+//Test if output file is filled with correct data contents, with half block last block, for server case (first ACK 0)
+TEST(TTFTPreceiver, outputFileCorrectHalfFilledLast_Server)
 {
     boost::asio::io_context testIoContext;
     uint16_t testport = 45042;
     boost::asio::ip::udp::endpoint testRemoteEndpoint(boost::asio::ip::udp::v4(), testport);
     boost::asio::ip::udp::socket testRemoteConnSocket(testIoContext, testRemoteEndpoint);
-    std::string testfilenametowrite = "testfileReceiver.txt";
-
-
-    //fill testfile
-    std::vector<char> ofsinput;
-    for(uint16_t i = 1; i <= 512 * NUM_OF_BLOCKS; ++i)
-    {
-        ofsinput.push_back(rand());
-    }
-
-    std::string testmode = "octet";
-
-    uint16_t receiverTestPort = 45043;
-    boost::asio::ip::udp::endpoint receiverEndpoint(boost::asio::ip::udp::v4(), receiverTestPort);
-    boost::asio::ip::udp::socket receiverSock(testIoContext, receiverEndpoint);
-
-    std::shared_ptr<std::ostream> ofs(new std::ofstream(testfilenametowrite, std::ios_base::binary | std::ios_base::app));
-
-    std::shared_ptr<TftpReceiver> testReceiver = std::make_shared<TftpReceiver>(std::move(receiverSock), ofs, str2mode(testmode), testRemoteEndpoint.address(), testport, dummyCallback);
-    testReceiver->start();
-
-    std::thread t([&testIoContext] () {testIoContext.run();});
-
-
-    //fill buffer with each data block from ofsinput and sent messages till all data blocks are exhausted
-
-    boost::asio::ip::udp::endpoint localsenderendpoint;
-    std::array<char, 512> buffer;
-    testRemoteConnSocket.receive_from(boost::asio::buffer(buffer, buffer.size()), localsenderendpoint); //First ACK
-    buffer.fill(0);
-    uint16_t blockcount = 1;
-    while(blockcount * 512 < ofsinput.size() + 512)
-    {
-        //fill and send current block from ofsinout before reading ACK
-        std::array<char, 512 + CONTROLBYTES> sendbuffer;
-        sendbuffer.fill(0);
-        *reinterpret_cast<uint16_t*>(sendbuffer.data()) = htons(static_cast<uint16_t>(TftpOpcode::DATA));
-        *reinterpret_cast<uint16_t*>(sendbuffer.data() + CONTROLBYTES/2) = htons(blockcount);
-
-        std::size_t blockbytes = 0;
-        for(std::size_t idx = (blockcount - 1) * 512; idx < ofsinput.size() && idx < (blockcount * 512); idx++)
-        {
-            *reinterpret_cast<char*>(sendbuffer.data() + idx - (blockcount - 1) * 512 + CONTROLBYTES) = ofsinput.at(idx);
-            blockbytes++;
-        }
-
-        testRemoteConnSocket.send_to(boost::asio::buffer(sendbuffer, CONTROLBYTES + blockbytes), localsenderendpoint);
-
-        buffer.fill(0);
-        testRemoteConnSocket.receive_from(boost::asio::buffer(buffer, buffer.size()), localsenderendpoint);
-        //(mStrand, filename_to_read, mode, remoteaddress, port, DEFAULT_BLOCKSIZE
-        bool equalControlInfo = ntohs(*reinterpret_cast<uint16_t*>(buffer.data())) == static_cast<uint16_t>(TftpOpcode::ACK);
-        bool equalACK = ntohs(*reinterpret_cast<uint16_t*>(buffer.data() + CONTROLBYTES/2)) == blockcount;
-        EXPECT_EQ(equalControlInfo, true);
-        EXPECT_EQ(equalACK, true);
-        blockcount++;
-    }
-    blockcount--; //One addition too many in loop
-    t.join();
-    EXPECT_EQ(blockcount, NUM_OF_BLOCKS);
-}
-
-//Test if last block is ACKed correctly, when it is half filled
-TEST(TTFTPreceiver, lastBlockACKHalfFilled)
-{
-    boost::asio::io_context testIoContext;
-    uint16_t testport = 45042;
-    boost::asio::ip::udp::endpoint testRemoteEndpoint(boost::asio::ip::udp::v4(), testport);
-    boost::asio::ip::udp::socket testRemoteConnSocket(testIoContext, testRemoteEndpoint);
-    std::string testfilenametowrite = "testfileReceiver.txt";
-
 
     //fill testfile
     std::vector<char> ofsinput;
@@ -287,20 +483,34 @@ TEST(TTFTPreceiver, lastBlockACKHalfFilled)
     boost::asio::ip::udp::endpoint receiverEndpoint(boost::asio::ip::udp::v4(), receiverTestPort);
     boost::asio::ip::udp::socket receiverSock(testIoContext, receiverEndpoint);
 
-    std::shared_ptr<std::ostream> ofs(new std::ofstream(testfilenametowrite, std::ios_base::binary | std::ios_base::app));
+    std::shared_ptr<std::ostream> ofs = std::make_shared<std::ostringstream>(std::ios_base::binary | std::ios_base::app);
 
     std::shared_ptr<TftpReceiver> testReceiver = std::make_shared<TftpReceiver>(std::move(receiverSock), ofs, str2mode(testmode), testRemoteEndpoint.address(), testport, dummyCallback);
+
+
+
+
+    //fill buffer with each data block from ofsinput and sent messages till all data blocks are exhausted
+    boost::asio::ip::udp::endpoint localsenderendpoint;
+    std::array<char, 512> buffer;
+
+
+    std::future<std::size_t> my_future =
+        testRemoteConnSocket.async_receive_from(boost::asio::buffer(buffer, buffer.size()), localsenderendpoint, boost::asio::use_future); //First ACK 0
 
     testReceiver->start();
 
     std::thread t([&testIoContext] () {testIoContext.run();});
+    auto futurestatus = my_future.wait_for(RETRANSMISSION_TIME * 2s);
+    if(futurestatus == std::future_status::timeout)
+    {
+        //Timeout should not happen here
+        EXPECT_EQ(true,false);
+        testRemoteConnSocket.close();
+    }
+    bool correct_server_ACK = ntohs(*reinterpret_cast<uint16_t*>(buffer.data() + CONTROLBYTES/2)) == 0;
+    EXPECT_EQ(correct_server_ACK, true);
 
-
-    //fill buffer with each data block from ofsinput and sent messages till all data blocks are exhausted
-
-    boost::asio::ip::udp::endpoint localsenderendpoint;
-    std::array<char, 512> buffer;
-    testRemoteConnSocket.receive_from(boost::asio::buffer(buffer, buffer.size()), localsenderendpoint); //First ACK
     buffer.fill(0);
     uint16_t blockcount = 1;
     while(blockcount * 512 < ofsinput.size() + 512)
@@ -318,76 +528,7 @@ TEST(TTFTPreceiver, lastBlockACKHalfFilled)
             blockbytes++;
         }
 
-        testRemoteConnSocket.send_to(boost::asio::buffer(sendbuffer, CONTROLBYTES + blockbytes), localsenderendpoint);
-
-        buffer.fill(0);
-        testRemoteConnSocket.receive_from(boost::asio::buffer(buffer, buffer.size()), localsenderendpoint);
-        //(mStrand, filename_to_read, mode, remoteaddress, port, DEFAULT_BLOCKSIZE
-        bool equalControlInfo = ntohs(*reinterpret_cast<uint16_t*>(buffer.data())) == static_cast<uint16_t>(TftpOpcode::ACK);
-        bool equalACK = ntohs(*reinterpret_cast<uint16_t*>(buffer.data() + CONTROLBYTES/2)) == blockcount;
-        EXPECT_EQ(equalControlInfo, true);
-        EXPECT_EQ(equalACK, true);
-        blockcount++;
-    }
-    blockcount--; //One addition too many in loop
-    t.join();
-    EXPECT_EQ(blockcount, NUM_OF_BLOCKS + 1);
-}
-
-//Test if output file is filled with correct data contents, with half block last block
-TEST(TTFTPreceiver, outputFileCorrectHalfFilledLast)
-{
-    boost::asio::io_context testIoContext;
-    uint16_t testport = 45042;
-    boost::asio::ip::udp::endpoint testRemoteEndpoint(boost::asio::ip::udp::v4(), testport);
-    boost::asio::ip::udp::socket testRemoteConnSocket(testIoContext, testRemoteEndpoint);
-    std::string testfilenametowrite = "testfileReceiver.txt";
-
-
-    //fill testfile
-    std::vector<char> ofsinput;
-    for(uint16_t i = 1; i <= 512 * NUM_OF_BLOCKS + 64; ++i)
-    {
-        ofsinput.push_back(rand());
-    }
-
-    std::string testmode = "octet";
-
-    uint16_t receiverTestPort = 45043;
-    boost::asio::ip::udp::endpoint receiverEndpoint(boost::asio::ip::udp::v4(), receiverTestPort);
-    boost::asio::ip::udp::socket receiverSock(testIoContext, receiverEndpoint);
-
-    std::shared_ptr<std::ostream> ofs(new std::ofstream(testfilenametowrite, std::ios_base::binary | std::ios_base::app));
-
-    std::shared_ptr<TftpReceiver> testReceiver = std::make_shared<TftpReceiver>(std::move(receiverSock), ofs, str2mode(testmode), testRemoteEndpoint.address(), testport, dummyCallback);
-    testReceiver->start();
-
-    std::thread t([&testIoContext] () {testIoContext.run();});
-
-
-    //fill buffer with each data block from ofsinput and sent messages till all data blocks are exhausted
-
-    boost::asio::ip::udp::endpoint localsenderendpoint;
-    std::array<char, 512> buffer;
-    testRemoteConnSocket.receive_from(boost::asio::buffer(buffer, buffer.size()), localsenderendpoint); //First ACK
-    buffer.fill(0);
-    uint16_t blockcount = 1;
-    while(blockcount * 512 < ofsinput.size() + 512)
-    {
-        //fill and send current block from ofsinout before reading ACK
-        std::array<char, 512 + CONTROLBYTES> sendbuffer;
-        sendbuffer.fill(0);
-        *reinterpret_cast<uint16_t*>(sendbuffer.data()) = htons(static_cast<uint16_t>(TftpOpcode::DATA));
-        *reinterpret_cast<uint16_t*>(sendbuffer.data() + CONTROLBYTES/2) = htons(blockcount);
-
-        std::size_t blockbytes = 0;
-        for(std::size_t idx = (blockcount - 1) * 512; idx < ofsinput.size() && idx < (blockcount * 512); idx++)
-        {
-            *reinterpret_cast<char*>(sendbuffer.data() + idx - (blockcount - 1) * 512 + CONTROLBYTES) = ofsinput.at(idx);
-            blockbytes++;
-        }
-
-        testRemoteConnSocket.send_to(boost::asio::buffer(sendbuffer, CONTROLBYTES + blockbytes), localsenderendpoint);
+        testRemoteConnSocket.send_to(boost::asio::buffer(sendbuffer, CONTROLBYTES + blockbytes), receiverEndpoint);
 
         buffer.fill(0);
         testRemoteConnSocket.receive_from(boost::asio::buffer(buffer, buffer.size()), localsenderendpoint);
@@ -402,7 +543,7 @@ TEST(TTFTPreceiver, outputFileCorrectHalfFilledLast)
     t.join();
     EXPECT_EQ(blockcount, NUM_OF_BLOCKS + 1);
 
-    std::ifstream ifs(testfilenametowrite);
+    std::istringstream ifs(static_cast<std::ostringstream*>(ofs.get())->str());
 
     std::size_t pos = 0;
     while(ifs)
@@ -418,7 +559,7 @@ TEST(TTFTPreceiver, outputFileCorrectHalfFilledLast)
 }
 
 //Test if output file is filled with correct data contents, with full block last block
-TEST(TTFTPreceiver, outputFileCorrectFullFilledLast)
+TEST(TTFTPreceiver, outputFileCorrectFullFilledLast_Server)
 {
     boost::asio::io_context testIoContext;
     uint16_t testport = 45042;
@@ -440,19 +581,31 @@ TEST(TTFTPreceiver, outputFileCorrectFullFilledLast)
     boost::asio::ip::udp::endpoint receiverEndpoint(boost::asio::ip::udp::v4(), receiverTestPort);
     boost::asio::ip::udp::socket receiverSock(testIoContext, receiverEndpoint);
 
-    std::shared_ptr<std::ostream> ofs(new std::ofstream(testfilenametowrite, std::ios_base::binary | std::ios_base::app));
+    std::shared_ptr<std::ostream> ofs = std::make_shared<std::ostringstream>(std::ios_base::binary | std::ios_base::app);
 
     std::shared_ptr<TftpReceiver> testReceiver = std::make_shared<TftpReceiver>(std::move(receiverSock), ofs, str2mode(testmode), testRemoteEndpoint.address(), testport, dummyCallback);
-    testReceiver->start();
-
-    std::thread t([&testIoContext] () {testIoContext.run();});
 
 
     //fill buffer with each data block from ofsinput and sent messages till all data blocks are exhausted
 
     boost::asio::ip::udp::endpoint localsenderendpoint;
     std::array<char, 512> buffer;
-    testRemoteConnSocket.receive_from(boost::asio::buffer(buffer, buffer.size()), localsenderendpoint); //First ACK
+
+    std::future<std::size_t> my_future =
+        testRemoteConnSocket.async_receive_from(boost::asio::buffer(buffer, buffer.size()), localsenderendpoint, boost::asio::use_future); //First ACK 0
+
+    testReceiver->start();
+
+    std::thread t([&testIoContext] () {testIoContext.run();});
+    auto futurestatus = my_future.wait_for(RETRANSMISSION_TIME * 2s);
+    if(futurestatus == std::future_status::timeout)
+    {
+        //Timeout should not happen here
+        EXPECT_EQ(true,false);
+        testRemoteConnSocket.close();
+    }
+    bool correct_server_ACK = ntohs(*reinterpret_cast<uint16_t*>(buffer.data() + CONTROLBYTES/2)) == 0;
+    EXPECT_EQ(correct_server_ACK, true);
     buffer.fill(0);
     uint16_t blockcount = 1;
     while(blockcount * 512 < ofsinput.size() + 512)
@@ -485,7 +638,174 @@ TEST(TTFTPreceiver, outputFileCorrectFullFilledLast)
     t.join();
     EXPECT_EQ(blockcount, NUM_OF_BLOCKS);
 
-    std::ifstream ifs(testfilenametowrite);
+    std::istringstream ifs(static_cast<std::ostringstream*>(ofs.get())->str());
+
+    std::size_t pos = 0;
+    while(ifs)
+    {
+        char c = ifs.get();
+        if(!ifs.eof())
+        {
+            EXPECT_EQ(c, ofsinput.at(pos));
+            pos++;
+        }
+    }
+    EXPECT_EQ(pos, blockcount * 512); //last block not full
+}
+
+//Test if output file is filled with correct data contents, with half block last block, for client case (first ACK 1)
+TEST(TTFTPreceiver, outputFileCorrectHalfFilledLast_Client)
+{
+    boost::asio::io_context testIoContext;
+    uint16_t testport = 45042;
+    boost::asio::ip::udp::endpoint testRemoteEndpoint(boost::asio::ip::udp::v4(), testport);
+    boost::asio::ip::udp::socket testRemoteConnSocket(testIoContext, testRemoteEndpoint);
+
+    //fill testfile
+    std::vector<char> ofsinput;
+    for(uint16_t i = 1; i <= 512 * NUM_OF_BLOCKS + 64; ++i)
+    {
+        ofsinput.push_back(rand());
+    }
+
+    std::string testmode = "octet";
+
+    uint16_t receiverTestPort = 45043;
+    boost::asio::ip::udp::endpoint receiverEndpoint(boost::asio::ip::udp::v4(), receiverTestPort);
+    boost::asio::ip::udp::socket receiverSock(testIoContext, receiverEndpoint);
+
+    std::shared_ptr<std::ostream> ofs = std::make_shared<std::ostringstream>(std::ios_base::binary | std::ios_base::app);
+
+    std::shared_ptr<TftpReceiver> testReceiver = std::make_shared<TftpReceiver>(std::move(receiverSock), ofs, str2mode(testmode), dummyCallback);
+
+
+
+
+    //fill buffer with each data block from ofsinput and sent messages till all data blocks are exhausted
+    boost::asio::ip::udp::endpoint localsenderendpoint;
+    std::array<char, 512> buffer;
+
+
+    testReceiver->start();
+
+    std::thread t([&testIoContext] () {testIoContext.run();});
+
+    buffer.fill(0);
+    uint16_t blockcount = 1;
+    while(blockcount * 512 < ofsinput.size() + 512)
+    {
+        //fill and send current block from ofsinout before reading ACK
+        std::array<char, 512 + CONTROLBYTES> sendbuffer;
+        sendbuffer.fill(0);
+        *reinterpret_cast<uint16_t*>(sendbuffer.data()) = htons(static_cast<uint16_t>(TftpOpcode::DATA));
+        *reinterpret_cast<uint16_t*>(sendbuffer.data() + CONTROLBYTES/2) = htons(blockcount);
+
+        std::size_t blockbytes = 0;
+        for(std::size_t idx = (blockcount - 1) * 512; idx < ofsinput.size() && idx < (blockcount * 512); idx++)
+        {
+            *reinterpret_cast<char*>(sendbuffer.data() + idx - (blockcount - 1) * 512 + CONTROLBYTES) = ofsinput.at(idx);
+            blockbytes++;
+        }
+
+        testRemoteConnSocket.send_to(boost::asio::buffer(sendbuffer, CONTROLBYTES + blockbytes), receiverEndpoint);
+
+        buffer.fill(0);
+        testRemoteConnSocket.receive_from(boost::asio::buffer(buffer, buffer.size()), localsenderendpoint);
+        //(mStrand, filename_to_read, mode, remoteaddress, port, DEFAULT_BLOCKSIZE
+        bool equalControlInfo = ntohs(*reinterpret_cast<uint16_t*>(buffer.data())) == static_cast<uint16_t>(TftpOpcode::ACK);
+        bool equalACK = ntohs(*reinterpret_cast<uint16_t*>(buffer.data() + CONTROLBYTES/2)) == blockcount;
+        blockcount++;
+        EXPECT_EQ(equalControlInfo, true);
+        EXPECT_EQ(equalACK, true);
+    }
+    blockcount--; //One addition too many in loop
+    t.join();
+    EXPECT_EQ(blockcount, NUM_OF_BLOCKS + 1);
+
+    std::istringstream ifs(static_cast<std::ostringstream*>(ofs.get())->str());
+
+    std::size_t pos = 0;
+    while(ifs)
+    {
+        char c = ifs.get();
+        if(!ifs.eof())
+        {
+            EXPECT_EQ(c, ofsinput.at(pos));
+            pos++;
+        }
+    }
+    EXPECT_EQ(pos, (blockcount - 1) * 512 + 64); //last block not full
+}
+
+//Test if output file is filled with correct data contents, with full block last block
+TEST(TTFTPreceiver, outputFileCorrectFullFilledLast_Client)
+{
+    boost::asio::io_context testIoContext;
+    uint16_t testport = 45042;
+    boost::asio::ip::udp::endpoint testRemoteEndpoint(boost::asio::ip::udp::v4(), testport);
+    boost::asio::ip::udp::socket testRemoteConnSocket(testIoContext, testRemoteEndpoint);
+
+
+    //fill testfile
+    std::vector<char> ofsinput;
+    for(uint16_t i = 1; i <= 512 * NUM_OF_BLOCKS; ++i)
+    {
+        ofsinput.push_back(rand());
+    }
+
+    std::string testmode = "octet";
+
+    uint16_t receiverTestPort = 45043;
+    boost::asio::ip::udp::endpoint receiverEndpoint(boost::asio::ip::udp::v4(), receiverTestPort);
+    boost::asio::ip::udp::socket receiverSock(testIoContext, receiverEndpoint);
+
+    std::shared_ptr<std::ostream> ofs = std::make_shared<std::ostringstream>(std::ios_base::binary | std::ios_base::app);
+
+    std::shared_ptr<TftpReceiver> testReceiver = std::make_shared<TftpReceiver>(std::move(receiverSock), ofs, str2mode(testmode), dummyCallback);
+
+
+    //fill buffer with each data block from ofsinput and sent messages till all data blocks are exhausted
+
+    boost::asio::ip::udp::endpoint localsenderendpoint;
+    std::array<char, 512> buffer;
+
+    testReceiver->start();
+
+    std::thread t([&testIoContext] () {testIoContext.run();});
+
+    buffer.fill(0);
+    uint16_t blockcount = 1;
+    while(blockcount * 512 < ofsinput.size() + 512)
+    {
+        //fill and send current block from ofsinout before reading ACK
+        std::array<char, 512 + CONTROLBYTES> sendbuffer;
+        sendbuffer.fill(0);
+        *reinterpret_cast<uint16_t*>(sendbuffer.data()) = htons(static_cast<uint16_t>(TftpOpcode::DATA));
+        *reinterpret_cast<uint16_t*>(sendbuffer.data() + CONTROLBYTES/2) = htons(blockcount);
+
+        std::size_t blockbytes = 0;
+        for(std::size_t idx = (blockcount - 1) * 512; idx < ofsinput.size() && idx < (blockcount * 512); idx++)
+        {
+            *reinterpret_cast<char*>(sendbuffer.data() + idx - (blockcount - 1) * 512 + CONTROLBYTES) = ofsinput.at(idx);
+            blockbytes++;
+        }
+
+        testRemoteConnSocket.send_to(boost::asio::buffer(sendbuffer, CONTROLBYTES + blockbytes), receiverEndpoint);
+
+        buffer.fill(0);
+        testRemoteConnSocket.receive_from(boost::asio::buffer(buffer, buffer.size()), localsenderendpoint);
+        //(mStrand, filename_to_read, mode, remoteaddress, port, DEFAULT_BLOCKSIZE
+        bool equalControlInfo = ntohs(*reinterpret_cast<uint16_t*>(buffer.data())) == static_cast<uint16_t>(TftpOpcode::ACK);
+        bool equalACK = ntohs(*reinterpret_cast<uint16_t*>(buffer.data() + CONTROLBYTES/2)) == blockcount;
+        blockcount++;
+        EXPECT_EQ(equalControlInfo, true);
+        EXPECT_EQ(equalACK, true);
+    }
+    blockcount--; //One addition too many in loop
+    t.join();
+    EXPECT_EQ(blockcount, NUM_OF_BLOCKS);
+
+    std::istringstream ifs(static_cast<std::ostringstream*>(ofs.get())->str());
 
     std::size_t pos = 0;
     while(ifs)
@@ -507,7 +827,6 @@ TEST(TTFTPreceiver, ACKresentAtOldDataBlock)
     uint16_t testport = 45042;
     boost::asio::ip::udp::endpoint testRemoteEndpoint(boost::asio::ip::udp::v4(), testport);
     boost::asio::ip::udp::socket testRemoteConnSocket(testIoContext, testRemoteEndpoint);
-    std::string testfilenametowrite = "testfileReceiver.txt";
 
 
     //fill testfile
@@ -523,7 +842,7 @@ TEST(TTFTPreceiver, ACKresentAtOldDataBlock)
     boost::asio::ip::udp::endpoint receiverEndpoint(boost::asio::ip::udp::v4(), receiverTestPort);
     boost::asio::ip::udp::socket receiverSock(testIoContext, receiverEndpoint);
 
-    std::shared_ptr<std::ostream> ofs(new std::ofstream(testfilenametowrite, std::ios_base::binary | std::ios_base::app));
+    std::shared_ptr<std::ostream> ofs = std::make_shared<std::ostringstream>(std::ios_base::binary | std::ios_base::app);
 
     std::shared_ptr<TftpReceiver> testReceiver = std::make_shared<TftpReceiver>(std::move(receiverSock), ofs, str2mode(testmode), testRemoteEndpoint.address(), testport, dummyCallback);
     testReceiver->start();
@@ -580,7 +899,6 @@ TEST(TTFTPreceiver, ErrorOnDataBlockIDTooLarge)
     uint16_t testport = 45042;
     boost::asio::ip::udp::endpoint testRemoteEndpoint(boost::asio::ip::udp::v4(), testport);
     boost::asio::ip::udp::socket testRemoteConnSocket(testIoContext, testRemoteEndpoint);
-    std::string testfilenametowrite = "testfileReceiver.txt";
 
 
     //fill testfile
@@ -596,7 +914,7 @@ TEST(TTFTPreceiver, ErrorOnDataBlockIDTooLarge)
     boost::asio::ip::udp::endpoint receiverEndpoint(boost::asio::ip::udp::v4(), receiverTestPort);
     boost::asio::ip::udp::socket receiverSock(testIoContext, receiverEndpoint);
 
-    std::shared_ptr<std::ostream> ofs(new std::ofstream(testfilenametowrite, std::ios_base::binary | std::ios_base::app));
+    std::shared_ptr<std::ostream> ofs = std::make_shared<std::ostringstream>(std::ios_base::binary | std::ios_base::app);
 
     std::shared_ptr<TftpReceiver> testReceiver = std::make_shared<TftpReceiver>(std::move(receiverSock), ofs, str2mode(testmode), testRemoteEndpoint.address(), testport, dummyCallback);
     testReceiver->start();
@@ -649,7 +967,6 @@ TEST(TTFTPreceiver, ACKResentOnTimeout)
     uint16_t testport = 45042;
     boost::asio::ip::udp::endpoint testRemoteEndpoint(boost::asio::ip::udp::v4(), testport);
     boost::asio::ip::udp::socket testRemoteConnSocket(testIoContext, testRemoteEndpoint);
-    std::string testfilenametoread = "testfile.txt";
 
 
     //fill testfile
@@ -659,19 +976,13 @@ TEST(TTFTPreceiver, ACKResentOnTimeout)
         ofsinput.push_back(i);
     }
 
-    {
-        std::ofstream ofs(testfilenametoread, std::ios_base::binary);
-        ofs.seekp(0);
-        ofs.write(ofsinput.data(), ofsinput.size());
-    }
-
     std::string testmode = "octet";
 
     uint16_t receiverTestPort = 45043;
     boost::asio::ip::udp::endpoint receiverEndpoint(boost::asio::ip::udp::v4(), receiverTestPort);
     boost::asio::ip::udp::socket receiverSock(testIoContext, receiverEndpoint);
 
-    std::shared_ptr<std::ostream> ofs(new std::ofstream(testfilenametoread, std::ios_base::binary | std::ios_base::app));
+    std::shared_ptr<std::ostream> ofs = std::make_shared<std::ostringstream>(std::ios_base::binary | std::ios_base::app);
 
     std::shared_ptr<TftpReceiver> testSender = std::make_shared<TftpReceiver>(std::move(receiverSock), ofs, str2mode(testmode), testRemoteEndpoint.address(), testport, dummyCallback);
     testSender->start();
@@ -717,7 +1028,6 @@ TEST(TTFTPreceiver, ConnectioncloseAfterTimeouts)
     uint16_t testport = 45042;
     boost::asio::ip::udp::endpoint testRemoteEndpoint(boost::asio::ip::udp::v4(), testport);
     boost::asio::ip::udp::socket testRemoteConnSocket(testIoContext, testRemoteEndpoint);
-    std::string testfilenametoread = "testfile.txt";
 
 
     //fill testfile
@@ -727,19 +1037,13 @@ TEST(TTFTPreceiver, ConnectioncloseAfterTimeouts)
         ofsinput.push_back(i);
     }
 
-    {
-        std::ofstream ofs(testfilenametoread, std::ios_base::binary);
-        ofs.seekp(0);
-        ofs.write(ofsinput.data(), ofsinput.size());
-    }
-
     std::string testmode = "octet";
 
     uint16_t receiverTestPort = 45043;
     boost::asio::ip::udp::endpoint receiverEndpoint(boost::asio::ip::udp::v4(), receiverTestPort);
     boost::asio::ip::udp::socket receiverSock(testIoContext, receiverEndpoint);
 
-    std::shared_ptr<std::ostream> ofs(new std::ofstream(testfilenametoread, std::ios_base::binary | std::ios_base::app));
+    std::shared_ptr<std::ostream> ofs = std::make_shared<std::ostringstream>(std::ios_base::binary | std::ios_base::app);
 
     std::shared_ptr<TftpReceiver> testSender = std::make_shared<TftpReceiver>(std::move(receiverSock), ofs, str2mode(testmode), testRemoteEndpoint.address(), testport, dummyCallback);
     testSender->start();

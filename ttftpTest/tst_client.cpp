@@ -58,21 +58,21 @@ TEST(TTFTPClient, CorrectRRQ)
     if(futurestatus == std::future_status::timeout)
     {
         timeout = true;
-        testMockServerConnSocket.close();
     }
     else
     {
         bool equalRequest = std::equal(RRQmsg.begin(), RRQmsg.end(), buffer.begin());
         EXPECT_EQ(equalRequest, true);
     }
-    t.join();
     EXPECT_EQ(timeout, false);
+    testIoContext.stop();
+    t.join();
 }
 
-//Test if correct write request arrives from client to mock server in read mode
+//Test if correct write request arrives from client to mock server in write mode
 TEST(TTFTPClient, CorrectWRQ)
 {
-    //fill initial read request message: opcode, filename-string, 0 byte, mode-string, 0 byte
+    //fill initial write request message: opcode, filename-string, 0 byte, mode-string, 0 byte
     //mode-string is for now "octet", nothing else is supported
     std::vector<char> WRQmsg(sizeof(uint16_t));
     uint16_t opcode = static_cast<uint16_t>(TftpOpcode::WRQ);
@@ -121,15 +121,15 @@ TEST(TTFTPClient, CorrectWRQ)
     if(futurestatus == std::future_status::timeout)
     {
         timeout = true;
-        testMockServerConnSocket.close();
     }
     else
     {
         bool equalRequest = std::equal(WRQmsg.begin(), WRQmsg.end(), buffer.begin());
         EXPECT_EQ(equalRequest, true);
     }
-    t.join();
     EXPECT_EQ(timeout, false);
+    testIoContext.stop();
+    t.join();
 }
 
 //TODO: Test if the client responds to the first server response correctly in RRQ mode (ACK for data block 1)
