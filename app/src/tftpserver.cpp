@@ -54,7 +54,7 @@ void TftpServer::HandleRequest(boost::system::error_code err, std::size_t receiv
             sendErrorMsg(4, "Did not receive a valid opcode");
         }
         //read opcode (2 bytes):
-        uint16_t opcode = *reinterpret_cast<uint16_t*>((buffer.data()));
+        uint16_t opcode = ntohs(*reinterpret_cast<uint16_t*>((buffer.data())));
 
         if(opcode == static_cast<uint16_t>(TftpOpcode::RRQ))
         {

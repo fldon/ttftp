@@ -20,7 +20,7 @@ TEST(TTFTPClient, CorrectRRQ)
     std::string filename = "RRQWriteTestFile.txt";
     std::string mode = "octet";
 
-    *reinterpret_cast<uint16_t*>(RRQmsg.data()) = opcode;
+    *reinterpret_cast<uint16_t*>(RRQmsg.data()) = htons(opcode);
     for(auto it = filename.begin(); it != filename.end(); ++it)
     {
         RRQmsg.push_back(*it);
@@ -88,7 +88,7 @@ TEST(TTFTPClient, CorrectWRQ)
     std::string filename = "WRQWriteTestFile.txt";
     std::string mode = "octet";
 
-    *reinterpret_cast<uint16_t*>(WRQmsg.data()) = opcode;
+    *reinterpret_cast<uint16_t*>(WRQmsg.data()) = htons(opcode);
     for(auto it = filename.begin(); it != filename.end(); ++it)
     {
         WRQmsg.push_back(*it);

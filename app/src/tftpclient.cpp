@@ -60,7 +60,7 @@ void TftpClient::start(boost::asio::ip::address server_address, TftpOpcode reque
 
         //fill IObuffer with request in correct format per RFC:
         //opcode(2 bytes)
-        *reinterpret_cast<uint16_t*>(IObuffer.data()) = opcode;
+        *reinterpret_cast<uint16_t*>(IObuffer.data()) = htons(opcode);
         messagesize_total += 2;
 
         //filename to read (0 terminated)
@@ -110,7 +110,7 @@ void TftpClient::start(boost::asio::ip::address server_address, TftpOpcode reque
 
         //fill IObuffer with request in correct format per RFC:
         //opcode(2 bytes)
-        *reinterpret_cast<uint16_t*>(IObuffer.data()) = opcode;
+        *reinterpret_cast<uint16_t*>(IObuffer.data()) = htons(opcode);
         messagesize_total += 2;
 
         //filename to read (0 terminated)

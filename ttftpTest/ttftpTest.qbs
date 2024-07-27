@@ -46,11 +46,13 @@ CppApplication {
         name: "Sourcefiles"
         prefix: FileInfo.joinPaths(projectSourcePath)
     files: [
+            "tftpmessages.cpp",
+            "tftpmessages.h",
             "tftpclient.cpp",
             "tftpreceiver.cpp",
             "tftpsender.cpp",
             "tftpserver.cpp",
-            "tftphelpdefs.cpp"
+            "tftphelpdefs.cpp",
         ]
     }
 

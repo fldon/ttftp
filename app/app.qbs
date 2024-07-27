@@ -18,6 +18,8 @@ CppApplication {
             "tftpsender.h",
             "tftpserver.cpp",
             "tftpserver.h",
+            "tftpmessages.cpp",
+            "tftpmessages.h"
         ]
     }
     //cpp.dynamicLibraries: ["SDL2", "SDL2_mixer"]

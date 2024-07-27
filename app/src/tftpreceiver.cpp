@@ -167,12 +167,12 @@ void TftpReceiver::sendNextAck(bool lastAck)
     *reinterpret_cast<uint16_t*>(lastsentack.data() + OPCODELENGTH) = htons(lastreceiveddatacount);
 
     auto self = shared_from_this();
-    databuffer.assign(databuffer.size(), 0);
     if(!lastAck)
         remoteConnSocket.async_send(boost::asio::buffer(lastsentack, OPCODELENGTH + ERRCODELENGTH), std::bind(&TftpReceiver::handleACKsent, shared_from_this(), boost::asio::placeholders::error, boost::asio::placeholders::bytes_transferred));
 
     else
     {
+        //TODO: maybe linger for some time, in order to re-send ACK if it has not arrived at remote host
         remoteConnSocket.send(boost::asio::buffer(lastsentack, OPCODELENGTH + ERRCODELENGTH));
         endOperation();
     }
@@ -180,6 +180,7 @@ void TftpReceiver::sendNextAck(bool lastAck)
 
 void TftpReceiver::startNextReceive()
 {
+    databuffer.assign(databuffer.size(), 0);
     readTimeoutTimer.expires_from_now(boost::posix_time::seconds(RETRANSMISSION_TIME));
     readTimeoutTimer.async_wait(std::bind(&TftpReceiver::handleReadTimeout, shared_from_this(), boost::asio::placeholders::error));
     if(isConnected)
