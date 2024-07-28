@@ -32,6 +32,12 @@ public:
     void setRRQ();
     void setWRQ();
 
+    void setFilename(const std::string & IN_filename);
+    [[nodiscard]] std::string getFilename() const;
+
+    void setMode(const TftpMode &IN_mode);
+    [[nodiscard]] TftpMode getMode() const;
+
 private:
     std::string mFilename{""};
     TftpMode mMode{TftpMode::INVALID};
@@ -47,11 +53,11 @@ public:
     std::string encode() const override;
 
     [[nodiscard]] block_nr_t getBlockNr() const;
-    void setBlockNr(block_nr_t Nr);
+    void setBlockNr(block_nr_t IN_nr);
 
     //Copies databuf into data, using move operations if possible
     template<typename T>
-    void setData(T&& databuf);
+    bool setData(T&& databuf);
 private:
     std::vector<unsigned char> mData;
     block_nr_t mBlockNr{0};
@@ -67,7 +73,7 @@ public:
     std::string encode() const override;
 
     [[nodiscard]] block_nr_t getBlockNr() const;
-    void setBlockNr(block_nr_t Nr);
+    void setBlockNr(block_nr_t IN_nr);
 private:
     block_nr_t mBlockNr{0};
 };
@@ -84,7 +90,7 @@ public:
     void setErrorCode(error_code_t code);
 
     std::string getErrMsg() const;
-    void setErrMsg(const std::string &msg);
+    void setErrorMsg(const std::string &msg);
 private:
     error_code_t mErrorCode{0};
     std::string mErrorMessage;
@@ -94,5 +100,15 @@ struct err_invalid_message_parameters : public std::runtime_error
 {
     err_invalid_message_parameters(std::string message):std::runtime_error(message) {}
 };
+
+
+template<typename T>
+bool DataMessage::setData(T&& databuf)
+{
+    if(databuf.size() != mData.size())
+        return false;
+    std::copy(std::forward<T>(databuf).begin(), std::forward<T>(databuf).end(), mData.begin());
+    return true;
+}
 
 #endif // TFTPMESSAGES_H

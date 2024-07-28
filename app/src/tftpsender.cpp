@@ -1,5 +1,6 @@
 #include "tftpsender.h"
 #include "tftphelpdefs.h"
+#include "tftpmessages.h"
 #include <fstream>
 #include <iostream>
 
@@ -11,7 +12,7 @@ Tftpsender::Tftpsender(boost::asio::ip::udp::socket &&INsocket, std::shared_ptr<
 }
 
 Tftpsender::Tftpsender(boost::asio::ip::udp::socket &&INsocket, std::shared_ptr<std::istream> inputstream, TftpMode INmode, std::function<void(std::shared_ptr<Tftpsender>, boost::system::error_code)> OperationDoneCallback, std::size_t INblocksize)
-    :input(inputstream), blocksize(INblocksize), remoteConnSocket(std::move(INsocket)), lastsentdata(blocksize + CONTROLBYTES), ackbuffer(blocksize), readTimeoutTimer(remoteConnSocket.get_executor()), mOperationDoneCallback(OperationDoneCallback)
+    :input(inputstream), blocksize(INblocksize), remoteConnSocket(std::move(INsocket)), lastsentdata(blocksize), ackbuffer(OPCODELENGTH + BLOCKNRLENGTH), readTimeoutTimer(remoteConnSocket.get_executor()), mOperationDoneCallback(OperationDoneCallback)
 {
     if(!remoteConnSocket.is_open())
     {
@@ -53,16 +54,18 @@ void Tftpsender::sendNextBlock()
     if(input)
     {
         lastsentdata.assign(lastsentdata.size(), 0);
-        input->read(lastsentdata.data() + CONTROLBYTES, blocksize);
+        input->read(lastsentdata.data(), blocksize);
     }
     auto readbytes = input->gcount();
     if(!sendingdone)
     {
-        *reinterpret_cast<uint16_t*>(lastsentdata.data()) = htons(3);
-        *reinterpret_cast<uint16_t*>(lastsentdata.data() + CONTROLBYTES / 2) = htons(lastsentdatacount);
+        DataMessage msg_to_send(blocksize);
+        msg_to_send.setData(lastsentdata);
+        msg_to_send.setBlockNr(lastsentdatacount);
+        std::shared_ptr<std::string> str_to_send = std::make_shared<std::string>(msg_to_send.encode());
 
         auto self = shared_from_this();
-        remoteConnSocket.async_send(boost::asio::buffer(lastsentdata, readbytes + CONTROLBYTES), [self](boost::system::error_code err, std::size_t sentbytes)
+        remoteConnSocket.async_send(boost::asio::buffer(*str_to_send, str_to_send->size()), [self, str_to_send](boost::system::error_code err, std::size_t sentbytes)
                                     {
                                         self->readTimeoutTimer.expires_from_now(boost::posix_time::seconds(RETRANSMISSION_TIME));
                                         self->readTimeoutTimer.async_wait(std::bind(&Tftpsender::handleReadTimeout, self, boost::asio::placeholders::error));
@@ -78,11 +81,15 @@ void Tftpsender::sendNextBlock()
 void Tftpsender::checkAckForLastBlock(boost::system::error_code err, std::size_t sentbytes)
 {
     readTimeoutTimer.cancel();
-    if(!err && sentbytes == 4) //4 bytes: 2 for opcode ACK, 2 for DATA packet number; anything else would be an error
+    if(!err && sentbytes == OPCODELENGTH + BLOCKNRLENGTH) //4 bytes: 2 for opcode ACK, 2 for DATA packet number; anything else would be an error
     {
+
+        AckMessage received_msg;
+        //Can only not be valid if opcode is wrong
+        bool valid_msg = received_msg.decode(std::string(ackbuffer.begin(), ackbuffer.end()));
+
         //handle error code: include timeout for read, and differentiate between timeout error (then treat as resend) and actual errors (abort sending)
-        uint16_t opcode = ntohs(*reinterpret_cast<uint16_t*>(ackbuffer.data()));
-        if(opcode != static_cast<uint8_t>(TftpOpcode::ACK))
+        if(!valid_msg)
         {
             sendErrorMsg(4, "Wrong opcode: expected ACK for package" + std::to_string(lastsentdatacount));
             //TODO: what errorcode to set?
@@ -90,7 +97,7 @@ void Tftpsender::checkAckForLastBlock(boost::system::error_code err, std::size_t
         }
         else
         {
-            uint16_t ack_block = ntohs(*reinterpret_cast<uint16_t*>(ackbuffer.data() + sizeof(uint16_t)));
+            uint16_t ack_block = received_msg.getBlockNr();
             if(ack_block < lastsentdatacount)
             {
                 sendNextBlock();
@@ -132,19 +139,13 @@ void Tftpsender::checkAckForLastBlock(boost::system::error_code err, std::size_t
 
 void Tftpsender::sendErrorMsg(uint16_t errorcode, std::string msg)
 {
-    //Error format: 2 bytes opcode: 05; 2 bytes errorCodem string errormessage, 1 byte end of string
-    constexpr uint16_t OPCODELENGTH = 2;
-    constexpr uint16_t ERRCODELENGTH = 2;
-
-    std::vector<char> messagetosend(OPCODELENGTH + ERRCODELENGTH + msg.size() + 1);
-    messagetosend.assign(messagetosend.size(), 0);
-
-    *reinterpret_cast<uint16_t*>(messagetosend.data()) = htons(5);
-    *reinterpret_cast<uint16_t*>(messagetosend.data() + OPCODELENGTH) = htons(errorcode);
-    std::copy(msg.begin(), msg.end(), messagetosend.begin() + OPCODELENGTH + ERRCODELENGTH);
+    ErrorMessage msg_to_send;
+    msg_to_send.setErrorCode(errorcode);
+    msg_to_send.setErrorMsg(msg);
+    std::shared_ptr<std::string> str_to_send = std::make_shared<std::string>(msg_to_send.encode());
 
     auto self = shared_from_this();
-    remoteConnSocket.async_send(boost::asio::buffer(messagetosend, messagetosend.size()), [self] (boost::system::error_code err, std::size_t sentbytes) {});
+    remoteConnSocket.async_send(boost::asio::buffer(*str_to_send, str_to_send->size()), [self, str_to_send] (boost::system::error_code, std::size_t) {});
 }
 
 

@@ -40,7 +40,7 @@ bool RequestMessage::decode(const std::string &IN_requestStr)
 }
 
 /*!
- * \brief create string from request parameters
+ * \brief create string from request parameters. Opcode is converted to network byte order.
  * \return
  * \throw invalid_message_parameters if message parameters are invalid. Filename is taken as is.
  */
@@ -58,16 +58,16 @@ std::string RequestMessage::encode() const
 
     //fill IObuffer with request in correct format per RFC:
     //opcode(2 bytes)
-    *reinterpret_cast<uint16_t*>(*it) = static_cast<uint16_t>(mOpCode);
-    it+=2;
+    *reinterpret_cast<uint16_t*>(&(*it)) = htons(static_cast<uint16_t>(mOpCode));
+    it += OPCODELENGTH;
 
     //filename to read (0 terminated)
-    std::copy(mFilename.begin(), mFilename.end(), it);
+    it = std::copy(mFilename.begin(), mFilename.end(), it);
     *it = 0;
     ++it;
 
     //mode (as string, 0 terminated)
-    std::copy(modestr.begin(), modestr.end(), it);
+    it = std::copy(modestr.begin(), modestr.end(), it);
     *it = 0;
     ++it;
     assert(it == IObuffer.end());
@@ -101,8 +101,28 @@ void RequestMessage::setWRQ()
     mOpCode = TftpOpcode::WRQ;
 }
 
+void RequestMessage::setFilename(const std::string & IN_filename)
+{
+    mFilename = IN_filename;
+}
+
+std::string RequestMessage::getFilename() const
+{
+    return mFilename;
+}
+
+void RequestMessage::setMode(const TftpMode &IN_mode)
+{
+    mMode = IN_mode;
+}
+
+TftpMode RequestMessage::getMode() const
+{
+    return mMode;
+}
+
 DataMessage::DataMessage(std::size_t IN_blocksize)
-    :mBlockNr(0), mBlocksize(IN_blocksize)
+    :mBlockNr(0), mBlocksize(IN_blocksize), mData(IN_blocksize, 0)
 {
     mOpCode = (TftpOpcode::DATA);
 }
@@ -116,7 +136,7 @@ DataMessage::DataMessage(std::size_t IN_blocksize)
 bool DataMessage::decode(const std::string &IN_dataStr)
 {
     //TODO: How to handle the case where more block data is sent than mBlocksize? Check sizes and throw exception? Or return false?
-    if(IN_dataStr.size() > mBlocksize + CONTROLBYTES)
+    if(IN_dataStr.size() != mBlocksize + CONTROLBYTES)
         return false;
 
     //read opcode (2 bytes):
@@ -151,6 +171,16 @@ std::string DataMessage::encode() const
     std::copy(mData.begin(), mData.end(), IOBuffer.begin() + CONTROLBYTES);
 
     return std::string(IOBuffer.begin(), IOBuffer.end());
+}
+
+void DataMessage::setBlockNr(block_nr_t IN_nr)
+{
+    mBlockNr = IN_nr;
+}
+
+block_nr_t DataMessage::getBlockNr() const
+{
+    return mBlockNr;
 }
 
 AckMessage::AckMessage()
@@ -191,6 +221,16 @@ std::string AckMessage::encode() const
     *reinterpret_cast<uint16_t*>(IOBuffer.data() + OPCODELENGTH) = htons(mBlockNr);
 
     return std::string(IOBuffer.begin(), IOBuffer.end());
+}
+
+block_nr_t AckMessage::getBlockNr() const
+{
+    return mBlockNr;
+}
+
+void AckMessage::setBlockNr(block_nr_t IN_nr)
+{
+    mBlockNr = IN_nr;
 }
 
 ErrorMessage::ErrorMessage()
@@ -238,4 +278,14 @@ std::string ErrorMessage::encode() const
     std::copy(mErrorMessage.begin(), mErrorMessage.end(), IOBuffer.begin() + OPCODELENGTH + ERRCODELENGTH);
 
     return std::string(IOBuffer.begin(), IOBuffer.end());
+}
+
+void ErrorMessage::setErrorCode(error_code_t code)
+{
+    mErrorCode = code;
+}
+
+void ErrorMessage::setErrorMsg(const std::string &msg)
+{
+    mErrorMessage = msg;
 }

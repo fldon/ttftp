@@ -1,4 +1,5 @@
 #include "tftpclient.h"
+#include "tftpmessages.h"
 #include <fstream>
 
 /*
@@ -50,43 +51,19 @@ void TftpClient::start(boost::asio::ip::address server_address, TftpOpcode reque
     {
     case TftpOpcode::RRQ:
     {
-        uint16_t opcode = static_cast<uint16_t>(TftpOpcode::RRQ);
-        std::string modestr = mode2str(TftpMode::OCTET);
-
-        static constexpr std::size_t BUFSIZE = 2048;
-        std::array<uint8_t, BUFSIZE> IObuffer;
-        int messagesize_total = 0;
-        IObuffer.fill(0);
-
-        //fill IObuffer with request in correct format per RFC:
-        //opcode(2 bytes)
-        *reinterpret_cast<uint16_t*>(IObuffer.data()) = htons(opcode);
-        messagesize_total += 2;
-
-        //filename to read (0 terminated)
-        for(auto &c : filename)
-        {
-            *((IObuffer.data() + messagesize_total)) = c;
-            ++messagesize_total;
-        }
-        *(IObuffer.data() + messagesize_total) = 0;
-        ++messagesize_total;
-
-        //mode (as string, 0 terminated)
-        for(auto &c : modestr)
-        {
-            *((IObuffer.data() + messagesize_total)) = c;
-            ++messagesize_total;
-        }
-        *(IObuffer.data() + messagesize_total) = 0;
-        ++messagesize_total;
+        RequestMessage msg_to_send;
+        msg_to_send.setRRQ();
+        msg_to_send.setFilename(filename);
+        msg_to_send.setMode(transfermode);
 
 
         //Create new socket on random port for sending the request and afterwards for listening
         boost::asio::ip::udp::socket sock(mStrand, boost::asio::ip::udp::v4());
 
+        std::string msg_string_to_send = msg_to_send.encode();
+
         //Send filled IObuffer
-        sock.send_to(boost::asio::buffer(IObuffer, messagesize_total), boost::asio::ip::udp::endpoint(server_address, SERVER_LISTEN_PORT));
+        sock.send_to(boost::asio::buffer(msg_string_to_send, msg_string_to_send.size()), boost::asio::ip::udp::endpoint(server_address, SERVER_LISTEN_PORT));
 
         //Receiver is constructed without knowing remote endpoint of server - it will receive the first block as acknowledgement, or time out
         std::string filepath_to_write = mRootfolder + filename; //get full path
@@ -100,43 +77,19 @@ void TftpClient::start(boost::asio::ip::address server_address, TftpOpcode reque
     }break;
     case TftpOpcode::WRQ:
     {
-        uint16_t opcode = static_cast<uint16_t>(TftpOpcode::WRQ);
-        std::string modestr = mode2str(TftpMode::OCTET);
+        RequestMessage msg_to_send;
+        msg_to_send.setWRQ();
+        msg_to_send.setFilename(filename);
+        msg_to_send.setMode(transfermode);
 
-        static constexpr std::size_t BUFSIZE = 2048;
-        std::array<uint8_t, BUFSIZE> IObuffer;
-        int messagesize_total = 0;
-        IObuffer.fill(0);
-
-        //fill IObuffer with request in correct format per RFC:
-        //opcode(2 bytes)
-        *reinterpret_cast<uint16_t*>(IObuffer.data()) = htons(opcode);
-        messagesize_total += 2;
-
-        //filename to read (0 terminated)
-        for(auto &c : filename)
-        {
-            *((IObuffer.data() + messagesize_total)) = c;
-            ++messagesize_total;
-        }
-        *(IObuffer.data() + messagesize_total) = 0;
-        ++messagesize_total;
-
-        //mode (as string, 0 terminated)
-        for(auto &c : modestr)
-        {
-            *((IObuffer.data() + messagesize_total)) = c;
-            ++messagesize_total;
-        }
-        *(IObuffer.data() + messagesize_total) = 0;
-        ++messagesize_total;
+        std::string msg_string_to_send = msg_to_send.encode();
 
 
         //Create new socket on random port for sending the request and afterwards for listening
         boost::asio::ip::udp::socket sock(mStrand, boost::asio::ip::udp::v4());
 
         //Send filled IObuffer
-        sock.send_to(boost::asio::buffer(IObuffer, messagesize_total), boost::asio::ip::udp::endpoint(server_address, SERVER_LISTEN_PORT));
+        sock.send_to(boost::asio::buffer(msg_string_to_send, msg_string_to_send.size()), boost::asio::ip::udp::endpoint(server_address, SERVER_LISTEN_PORT));
 
         //Sender is constructed without knowing remote endpoint of server - it will receive the first ACK for block 0, or time out
         std::string filepath_to_read = mRootfolder + filename; //get full path

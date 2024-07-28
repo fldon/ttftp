@@ -53,17 +53,23 @@ void TftpServer::HandleRequest(boost::system::error_code err, std::size_t receiv
         {
             sendErrorMsg(4, "Did not receive a valid opcode");
         }
-        //read opcode (2 bytes):
-        uint16_t opcode = ntohs(*reinterpret_cast<uint16_t*>((buffer.data())));
 
-        if(opcode == static_cast<uint16_t>(TftpOpcode::RRQ))
+        RequestMessage received_msg;
+        bool valid_request = received_msg.decode(std::string(buffer.begin(), buffer.begin() + receivedbytes));
+
+        if(!valid_request)
         {
-            HandleSubRequest_RRQ();
+            sendErrorMsg(4, "Did not receive a valid request message. Opcode or mode were not recognized");
         }
 
-        else if(opcode == static_cast<uint16_t>(TftpOpcode::WRQ))
+        if(received_msg.isRRQ())
         {
-            HandleSubRequest_WRQ();
+            HandleSubRequest_RRQ(received_msg);
+        }
+
+        else if(received_msg.isWRQ())
+        {
+            HandleSubRequest_WRQ(received_msg);
         }
 
         buffer.fill(0);
@@ -78,16 +84,15 @@ void TftpServer::HandleRequest(boost::system::error_code err, std::size_t receiv
 /*!
  * \brief Handle an incoming read request on the server listen port
  */
-void TftpServer::HandleSubRequest_RRQ()
+void TftpServer::HandleSubRequest_RRQ(const RequestMessage &request)
 {
-    std::string filename_to_read = reinterpret_cast<char*>(buffer.data() + 2);
+    std::string filename_to_read = request.getFilename();
     filename_to_read = rootfolder + filename_to_read; //get full path
-    std::string mode = reinterpret_cast<char*>(buffer.data() + 2 + filename_to_read.size() + 1);
+    std::string mode = mode2str(request.getMode());
     uint16_t remoteport = currAccEndpoint.port();
     boost::asio::ip::address remoteaddress = currAccEndpoint.address();
 
     boost::asio::ip::udp::socket newsock(mStrand, boost::asio::ip::udp::v4());
-    //Tftpsender sender(std::move(newsock), filename_to_read, mode, remoteaddress, remoteport, DEFAULT_BLOCKSIZE);
 
     std::shared_ptr<std::istream> ifs(new std::ifstream(filename_to_read, std::ios_base::binary));
 
@@ -99,11 +104,11 @@ void TftpServer::HandleSubRequest_RRQ()
 /*!
  * \brief Handle an incoming write request on the server listen port
  */
-void TftpServer::HandleSubRequest_WRQ()
+void TftpServer::HandleSubRequest_WRQ(const RequestMessage &request)
 {
-    std::string filename_to_write = reinterpret_cast<char*>(buffer.data() + 2);
+    std::string filename_to_write = request.getFilename();
     filename_to_write = rootfolder + filename_to_write; //get full path
-    std::string mode = reinterpret_cast<char*>(buffer.data() + 2 + filename_to_write.size() + 1);
+    std::string mode = mode2str(request.getMode());
     uint16_t remoteport = currAccEndpoint.port();
     boost::asio::ip::address remoteaddress = currAccEndpoint.address();
 

@@ -5,6 +5,7 @@
 #include <memory>
 #include <boost/asio.hpp>
 #include "tftphelpdefs.h"
+#include "tftpmessages.h"
 
 /*
  * The end of an established tftp session that receives data (used for client and server)
@@ -48,7 +49,7 @@ private:
     std::size_t blocksize{0};
     boost::asio::ip::udp::socket remoteConnSocket;
     uint16_t lastreceiveddatacount{0};
-    std::vector<char> lastsentack{};
+    AckMessage lastsentack{};
     std::vector<char> databuffer{};
 
     boost::asio::deadline_timer readTimeoutTimer;

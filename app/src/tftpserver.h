@@ -3,6 +3,7 @@
 
 #include <string>
 #include <boost/asio.hpp>
+#include "tftpmessages.h"
 #include "tftpsender.h"
 #include "tftpreceiver.h"
 
@@ -17,8 +18,8 @@ public:
 
 private:
     void HandleRequest(boost::system::error_code err, std::size_t receivedbytes);
-    void HandleSubRequest_RRQ();
-    void HandleSubRequest_WRQ();
+    void HandleSubRequest_RRQ(const RequestMessage &request);
+    void HandleSubRequest_WRQ(const RequestMessage &request);
 
     void sendErrorMsg(uint16_t errorcode, std::string msg);
 

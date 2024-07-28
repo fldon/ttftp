@@ -11,11 +11,11 @@ TftpReceiver::TftpReceiver(boost::asio::ip::udp::socket &&INsocket, std::shared_
 }
 
 TftpReceiver::TftpReceiver(boost::asio::ip::udp::socket &&INsocket,
-    std::shared_ptr<std::ostream> outputstream,
-    TftpMode INmode,
-    std::function<void(std::shared_ptr<TftpReceiver>, boost::system::error_code)> INoperationDoneCallback,
-    std::size_t INblocksize)
-    :blocksize(INblocksize), remoteConnSocket(std::move(INsocket)), lastsentack(blocksize), databuffer(blocksize + CONTROLBYTES), readTimeoutTimer(remoteConnSocket.get_executor()), mOperationDoneCallback(INoperationDoneCallback), output(outputstream)
+                           std::shared_ptr<std::ostream> outputstream,
+                           TftpMode INmode,
+                           std::function<void(std::shared_ptr<TftpReceiver>, boost::system::error_code)> INoperationDoneCallback,
+                           std::size_t INblocksize)
+    :blocksize(INblocksize), remoteConnSocket(std::move(INsocket)), databuffer(blocksize + CONTROLBYTES), readTimeoutTimer(remoteConnSocket.get_executor()), mOperationDoneCallback(INoperationDoneCallback), output(outputstream)
 {
     if(!remoteConnSocket.is_open())
     {
@@ -62,8 +62,10 @@ void TftpReceiver::checkReceivedBlock(boost::system::error_code err, std::size_t
         }
         else
         {
-            uint16_t opcode = ntohs(*reinterpret_cast<uint16_t*>(databuffer.data()));
-            if(opcode != static_cast<uint8_t>(TftpOpcode::DATA))
+            DataMessage received_msg(blocksize);
+            bool valid_msg_received = received_msg.decode(std::string(databuffer.begin(), databuffer.end()));
+
+            if(!valid_msg_received)
             {
                 sendErrorMsg(4, "Wrong opcode: expected DATA for package" + std::to_string(lastreceiveddatacount));
                 //TODO: what errorcode to set?
@@ -71,7 +73,7 @@ void TftpReceiver::checkReceivedBlock(boost::system::error_code err, std::size_t
             }
             else
             {
-                uint16_t dataCount = ntohs(*reinterpret_cast<uint16_t*>(databuffer.data() + 2));
+                uint16_t dataCount = received_msg.getBlockNr();
 
                 if(dataCount <= lastreceiveddatacount)
                 {
@@ -83,7 +85,6 @@ void TftpReceiver::checkReceivedBlock(boost::system::error_code err, std::size_t
                     timeoutcount = 0;
 
                     //Write contents of data buffer into file
-                    //std::ofstream ofs(filename, std::ios_base::binary | std::ios_base::app);
                     if(!(*output))
                     {
                         sendErrorMsg(1, "Requested file could not be opened for output");
@@ -149,31 +150,35 @@ void TftpReceiver::sendErrorMsg(uint16_t errorcode, std::string msg)
 {
     //Error format: 2 bytes opcode: 05; 2 bytes errorCodem string errormessage, 1 byte end of string
 
-
-    std::vector<char> messagetosend(OPCODELENGTH + ERRCODELENGTH + msg.size() + 1);
-    messagetosend.assign(messagetosend.size(), 0);
-
-    *reinterpret_cast<uint16_t*>(messagetosend.data()) = htons(static_cast<uint16_t>(TftpOpcode::ERROR));
-    *reinterpret_cast<uint16_t*>(messagetosend.data() + OPCODELENGTH) = htons(errorcode);
-    std::copy(msg.begin(), msg.end(), messagetosend.begin() + OPCODELENGTH + ERRCODELENGTH);
+    ErrorMessage msg_to_send;
+    msg_to_send.setErrorCode(errorcode);
+    msg_to_send.setErrorMsg(msg);
+    std::shared_ptr<std::string> str_to_send = std::make_shared<std::string>(msg_to_send.encode());
 
     auto self = shared_from_this();
-    remoteConnSocket.async_send(boost::asio::buffer(messagetosend, messagetosend.size()), [self] (boost::system::error_code err, std::size_t sentbytes) {});
+    remoteConnSocket.async_send(boost::asio::buffer(*str_to_send, str_to_send->size()), [self, str_to_send] (boost::system::error_code, std::size_t) {});
 }
 
 void TftpReceiver::sendNextAck(bool lastAck)
 {
-    *reinterpret_cast<uint16_t*>(lastsentack.data()) = htons(static_cast<short>(TftpOpcode::ACK));
-    *reinterpret_cast<uint16_t*>(lastsentack.data() + OPCODELENGTH) = htons(lastreceiveddatacount);
+
+    lastsentack.setBlockNr(lastreceiveddatacount);
+    std::shared_ptr<std::string> string_to_send = std::make_shared<std::string>(lastsentack.encode());
 
     auto self = shared_from_this();
     if(!lastAck)
-        remoteConnSocket.async_send(boost::asio::buffer(lastsentack, OPCODELENGTH + ERRCODELENGTH), std::bind(&TftpReceiver::handleACKsent, shared_from_this(), boost::asio::placeholders::error, boost::asio::placeholders::bytes_transferred));
-
+    {
+        remoteConnSocket.async_send(boost::asio::buffer(*string_to_send, string_to_send->size()),
+                                    [self, string_to_send] (boost::system::error_code err, std::size_t sentbytes)
+                                    {
+                                        self->handleACKsent(err, sentbytes);
+                                    });
+    }
     else
     {
         //TODO: maybe linger for some time, in order to re-send ACK if it has not arrived at remote host
-        remoteConnSocket.send(boost::asio::buffer(lastsentack, OPCODELENGTH + ERRCODELENGTH));
+        //TODO: also, do not send this synchronously here. Theoretically it could still block
+        remoteConnSocket.send(boost::asio::buffer(*string_to_send, string_to_send->size()));
         endOperation();
     }
 }
