@@ -33,7 +33,7 @@ public:
 private:
     void sendNextAck(bool lastAck = false);
     void checkReceivedBlock(boost::system::error_code err, std::size_t sentbytes);
-    void sendErrorMsg(uint16_t errorcode, std::string msg);
+    void sendErrorMsg(uint16_t errorcode, std::string msg, boost::asio::ip::udp::endpoint& endpoint_to_send);
     void handleReadTimeout(boost::system::error_code err);
 
     void handleACKsent(boost::system::error_code err, std::size_t sentbytes);
@@ -58,6 +58,7 @@ private:
     std::function<void(std::shared_ptr<TftpReceiver>, boost::system::error_code)> mOperationDoneCallback;
 
     boost::asio::ip::udp::endpoint mSenderEndpoint;
+    boost::asio::ip::udp::endpoint mLastReceivedSenderEndpoint;
     bool isConnected = false;
     bool operationEnded = false;
 

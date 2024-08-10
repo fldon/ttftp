@@ -1,18 +1,17 @@
 #include "tftpsender.h"
 #include "tftphelpdefs.h"
 #include "tftpmessages.h"
-#include <fstream>
 #include <iostream>
 
 Tftpsender::Tftpsender(boost::asio::ip::udp::socket &&INsocket, std::shared_ptr<std::istream> inputstream, TftpMode INmode, const boost::asio::ip::address &INremoteaddress, uint16_t port, std::function<void(std::shared_ptr<Tftpsender>, boost::system::error_code)> INOperationDoneCallback, std::size_t INblocksize)
     :Tftpsender(std::forward<boost::asio::ip::udp::socket>(INsocket), inputstream, INmode, INOperationDoneCallback, INblocksize)
 {
-    mReceiverEndpoint = boost::asio::ip::udp::endpoint(INremoteaddress, port);
+    mLastReceivedReceiverEndpoint = boost::asio::ip::udp::endpoint(INremoteaddress, port);
     onConnect();
 }
 
 Tftpsender::Tftpsender(boost::asio::ip::udp::socket &&INsocket, std::shared_ptr<std::istream> inputstream, TftpMode INmode, std::function<void(std::shared_ptr<Tftpsender>, boost::system::error_code)> OperationDoneCallback, std::size_t INblocksize)
-    :input(inputstream), blocksize(INblocksize), remoteConnSocket(std::move(INsocket)), lastsentdata(blocksize), ackbuffer(OPCODELENGTH + BLOCKNRLENGTH), readTimeoutTimer(remoteConnSocket.get_executor()), mOperationDoneCallback(OperationDoneCallback)
+    :blocksize(INblocksize), remoteConnSocket(std::move(INsocket)), lastsentdata(blocksize), ackbuffer(OPCODELENGTH + BLOCKNRLENGTH), readTimeoutTimer(remoteConnSocket.get_executor()), mOperationDoneCallback(OperationDoneCallback), input(inputstream)
 {
     if(!remoteConnSocket.is_open())
     {
@@ -22,10 +21,9 @@ Tftpsender::Tftpsender(boost::asio::ip::udp::socket &&INsocket, std::shared_ptr<
 
 void Tftpsender::start()
 {
-    //std::ifstream ifs(filename);
     if(!(input))
     {
-        sendErrorMsg(1, "Requested file not found");
+        sendErrorMsg(1, "Requested file not found", mReceiverEndpoint);
         //TODO: what errorcode to set?
         endOperation();
     }
@@ -49,12 +47,17 @@ void Tftpsender::sendNextBlock()
 {
     //Start with block 1 of data, then keep sending new block whenever ack for that block comes
     //Resend last block after timeout
-    //std::ifstream ifs(filename, std::ios_base::binary);
     input->seekg((lastsentdatacount - 1) * blocksize);
     if(input)
     {
         lastsentdata.assign(lastsentdata.size(), 0);
         input->read(lastsentdata.data(), blocksize);
+    }
+    else
+    {
+        sendErrorMsg(1, "Error reading from requested file. Might not exist (anymore).", mReceiverEndpoint);
+        //TODO: what errorcode to set?
+        endOperation();
     }
     auto readbytes = input->gcount();
     if(!sendingdone)
@@ -65,12 +68,15 @@ void Tftpsender::sendNextBlock()
         std::shared_ptr<std::string> str_to_send = std::make_shared<std::string>(msg_to_send.encode());
 
         auto self = shared_from_this();
-        remoteConnSocket.async_send(boost::asio::buffer(*str_to_send, str_to_send->size()), [self, str_to_send](boost::system::error_code err, std::size_t sentbytes)
-                                    {
-                                        self->readTimeoutTimer.expires_from_now(boost::posix_time::seconds(RETRANSMISSION_TIME));
-                                        self->readTimeoutTimer.async_wait(std::bind(&Tftpsender::handleReadTimeout, self, boost::asio::placeholders::error));
-                                        self->startNextReceive();
-                                    });
+        remoteConnSocket.async_send_to(boost::asio::buffer(*str_to_send, str_to_send->size()), mReceiverEndpoint, [self, str_to_send](boost::system::error_code err, std::size_t sentbytes)
+                                       {
+                                           if(!err && sentbytes != 0)
+                                           {
+                                               self->readTimeoutTimer.expires_from_now(boost::posix_time::seconds(RETRANSMISSION_TIME));
+                                               self->readTimeoutTimer.async_wait(std::bind(&Tftpsender::handleReadTimeout, self, boost::asio::placeholders::error));
+                                               self->startNextReceive();
+                                           }
+                                       });
         if(readbytes < blocksize)
         {
             sendingdone = true;
@@ -81,7 +87,8 @@ void Tftpsender::sendNextBlock()
 void Tftpsender::checkAckForLastBlock(boost::system::error_code err, std::size_t sentbytes)
 {
     readTimeoutTimer.cancel();
-    if(!err && sentbytes == OPCODELENGTH + BLOCKNRLENGTH) //4 bytes: 2 for opcode ACK, 2 for DATA packet number; anything else would be an error
+    bool wrongRemoteHost = isConnected && mLastReceivedReceiverEndpoint != mReceiverEndpoint;
+    if(!err && sentbytes == OPCODELENGTH + BLOCKNRLENGTH && !wrongRemoteHost) //4 bytes: 2 for opcode ACK, 2 for DATA packet number; anything else would be an error
     {
 
         AckMessage received_msg;
@@ -91,7 +98,7 @@ void Tftpsender::checkAckForLastBlock(boost::system::error_code err, std::size_t
         //handle error code: include timeout for read, and differentiate between timeout error (then treat as resend) and actual errors (abort sending)
         if(!valid_msg)
         {
-            sendErrorMsg(4, "Wrong opcode: expected ACK for package" + std::to_string(lastsentdatacount));
+            sendErrorMsg(4, "Wrong opcode: expected ACK for package" + std::to_string(lastsentdatacount), mReceiverEndpoint);
             //TODO: what errorcode to set?
             endOperation();
         }
@@ -102,8 +109,16 @@ void Tftpsender::checkAckForLastBlock(boost::system::error_code err, std::size_t
             {
                 sendNextBlock();
             }
+            //Received the ack we were waiting for
             else if(ack_block == lastsentdatacount)
             {
+                //If this is the first message from this peer, set it as correct remote host for this transfer
+                if(!isConnected)
+                {
+                    onConnect();
+                }
+
+
                 lastsentdatacount++;
                 timeoutcount = 0;
 
@@ -119,14 +134,21 @@ void Tftpsender::checkAckForLastBlock(boost::system::error_code err, std::size_t
             }
             else if(ack_block > lastsentdatacount)
             {
-                sendErrorMsg(4, "ACK for package that was not yet sent: expected " + std::to_string(lastsentdatacount) + ", got " + std::to_string(ack_block));
+                sendErrorMsg(4, "ACK for package that was not yet sent: expected " + std::to_string(lastsentdatacount) + ", got " + std::to_string(ack_block), mReceiverEndpoint);
                 //TODO: what errorcode to set?
                 endOperation();
             }
         }
     }
+    else if(wrongRemoteHost)
+    {
+        //After sending error message, keep going with a normal receive
+        sendErrorMsg(5,"Remote host is not the partner of the transfer on this port", mLastReceivedReceiverEndpoint);
+        //For reasons of laziness, just re-send the previous block
+        sendNextBlock();
+    }
     //Read operation momentarily cancelled by timer
-    else if(err == boost::asio::error::operation_aborted)
+    else if(err == boost::asio::error::operation_aborted || sentbytes != OPCODELENGTH + BLOCKNRLENGTH)
     {
         sendNextBlock();
     }
@@ -137,7 +159,7 @@ void Tftpsender::checkAckForLastBlock(boost::system::error_code err, std::size_t
     }
 }
 
-void Tftpsender::sendErrorMsg(uint16_t errorcode, std::string msg)
+void Tftpsender::sendErrorMsg(uint16_t errorcode, std::string msg, boost::asio::ip::udp::endpoint& endpoint_to_send)
 {
     ErrorMessage msg_to_send;
     msg_to_send.setErrorCode(errorcode);
@@ -145,7 +167,7 @@ void Tftpsender::sendErrorMsg(uint16_t errorcode, std::string msg)
     std::shared_ptr<std::string> str_to_send = std::make_shared<std::string>(msg_to_send.encode());
 
     auto self = shared_from_this();
-    remoteConnSocket.async_send(boost::asio::buffer(*str_to_send, str_to_send->size()), [self, str_to_send] (boost::system::error_code, std::size_t) {});
+    remoteConnSocket.async_send_to(boost::asio::buffer(*str_to_send, str_to_send->size()), endpoint_to_send, [self, str_to_send] (boost::system::error_code, std::size_t) {});
 }
 
 
@@ -162,7 +184,7 @@ void Tftpsender::handleReadTimeout(boost::system::error_code err)
         }
         else
         {
-            sendErrorMsg(4, "Timeout while waiting for ACK for Data Packet " + std::to_string(lastsentdatacount));
+            sendErrorMsg(4, "Timeout while waiting for ACK for Data Packet " + std::to_string(lastsentdatacount), mReceiverEndpoint);
             endOperation(err);
         }
     }
@@ -172,24 +194,25 @@ void Tftpsender::startNextReceive()
 {
     if(isConnected)
     {
-        remoteConnSocket.async_receive(boost::asio::buffer(ackbuffer, blocksize), std::bind(&Tftpsender::checkAckForLastBlock, shared_from_this(), boost::asio::placeholders::error, boost::asio::placeholders::bytes_transferred));
+        remoteConnSocket.async_receive_from(boost::asio::buffer(ackbuffer, blocksize), mLastReceivedReceiverEndpoint, std::bind(&Tftpsender::checkAckForLastBlock, shared_from_this(), boost::asio::placeholders::error, boost::asio::placeholders::bytes_transferred));
     }
     //Client case: First ack message is used to establish previously unknown endpoint to receiver
     else
     {
-        remoteConnSocket.async_receive_from(boost::asio::buffer(ackbuffer, blocksize), mReceiverEndpoint, std::bind(&Tftpsender::handleFirstAckkWithoutConnect, shared_from_this(), boost::asio::placeholders::error, boost::asio::placeholders::bytes_transferred));
+        remoteConnSocket.async_receive_from(boost::asio::buffer(ackbuffer, blocksize), mLastReceivedReceiverEndpoint, std::bind(&Tftpsender::handleFirstAckkWithoutConnect, shared_from_this(), boost::asio::placeholders::error, boost::asio::placeholders::bytes_transferred));
     }
 }
 
 void Tftpsender::handleFirstAckkWithoutConnect(boost::system::error_code err, std::size_t sentbytes)
 {
-    onConnect();
+    //onConnect();
     checkAckForLastBlock(err, sentbytes);
 }
 
 void Tftpsender::onConnect()
 {
-    remoteConnSocket.connect(mReceiverEndpoint);
+    //remoteConnSocket.connect(mReceiverEndpoint);
+    mReceiverEndpoint = mLastReceivedReceiverEndpoint;
     isConnected = true;
 }
 

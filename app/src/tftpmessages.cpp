@@ -122,7 +122,7 @@ TftpMode RequestMessage::getMode() const
 }
 
 DataMessage::DataMessage(std::size_t IN_blocksize)
-    :mBlockNr(0), mBlocksize(IN_blocksize), mData(IN_blocksize, 0)
+    :mData(IN_blocksize, 0), mBlockNr(0), mBlocksize(IN_blocksize)
 {
     mOpCode = (TftpOpcode::DATA);
 }
