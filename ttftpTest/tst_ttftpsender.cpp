@@ -3,9 +3,7 @@
 #include <gtest/gtest.h>
 
 #include "tftpsender.h"
-
 #include "tftphelpdefs.h"
-#include <fstream>
 #include <iostream>
 
 using namespace std::chrono_literals;
@@ -822,6 +820,7 @@ TEST(TTFTPSender, ResendWhenSmallerACK)
             }
         }
     }
+    testIoContext.stop(); //further transfer not relevant
     t.join();
 
     EXPECT_EQ(count,  1); //Expect last "data" block to be empty
@@ -865,6 +864,7 @@ TEST(TTFTPSender, ErrorWhenLargerACK)
     boost::asio::ip::udp::endpoint localsenderendpoint;
 
     bool done = false;
+    bool timeout = false;
     unsigned int count = 1;
     unsigned int resendcount = 0;
     while(!done)
@@ -875,7 +875,7 @@ TEST(TTFTPSender, ErrorWhenLargerACK)
         auto futurestatus = my_future.wait_for(RETRANSMISSION_TIME * RETRANSMISSIONS_UNTIL_TIMEOUT *  2s);
         if(futurestatus == std::future_status::timeout)
         {
-            done = true;
+            timeout = true;
             testRemoteConnSocket.close();
         }
         else
@@ -906,10 +906,12 @@ TEST(TTFTPSender, ErrorWhenLargerACK)
             {
                 bool equaldata = std::equal(expectedError.begin(), expectedError.end(), buffer.begin());
                 EXPECT_EQ(equaldata, true);
+                done = true;
             }
             buffer.fill(0);
         }
     }
     testIoContext.stop();
     t.join();
+    EXPECT_EQ(timeout, false);
 }

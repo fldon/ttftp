@@ -4,7 +4,6 @@
 
 #include "tftpreceiver.h"
 #include "tftphelpdefs.h"
-#include <fstream>
 
 using namespace std::chrono_literals;
 
@@ -72,6 +71,7 @@ TEST(TTFTPreceiver, firstAckAfterStart_0)
         EXPECT_EQ(equalACK, true);
     }
 
+    testIoContext.stop();
     t.join();
 
 }
@@ -148,6 +148,7 @@ TEST(TTFTPreceiver, firstAckAfterStart_1)
         EXPECT_EQ(equalControlInfo, true);
         EXPECT_EQ(equalACK, true);
     }
+    testIoContext.stop();
     t.join();
 }
 
@@ -315,7 +316,28 @@ TEST(TTFTPreceiver, lastBlockACKFullFilled_Server)
         EXPECT_EQ(equalACK, true);
         blockcount++;
     }
+
+    //Send 0 size data last, so the remote knows transfer is done:
+    //fill and send current block from ofsinout before reading ACK
+    std::array<char, 512 + CONTROLBYTES> sendbuffer;
+    sendbuffer.fill(0);
+    *reinterpret_cast<uint16_t*>(sendbuffer.data()) = htons(static_cast<uint16_t>(TftpOpcode::DATA));
+    *reinterpret_cast<uint16_t*>(sendbuffer.data() + CONTROLBYTES/2) = htons(blockcount);
+
+    std::size_t blockbytes = 0;
+    testRemoteConnSocket.send_to(boost::asio::buffer(sendbuffer, CONTROLBYTES + blockbytes), localsenderendpoint);
+
+    buffer.fill(0);
+    testRemoteConnSocket.receive_from(boost::asio::buffer(buffer, buffer.size()), localsenderendpoint);
+    //(mStrand, filename_to_read, mode, remoteaddress, port, DEFAULT_BLOCKSIZE
+    bool equalControlInfo = ntohs(*reinterpret_cast<uint16_t*>(buffer.data())) == static_cast<uint16_t>(TftpOpcode::ACK);
+    bool equalACK = ntohs(*reinterpret_cast<uint16_t*>(buffer.data() + CONTROLBYTES/2)) == blockcount;
+    EXPECT_EQ(equalControlInfo, true);
+    EXPECT_EQ(equalACK, true);
+    blockcount++;
+
     blockcount--; //One addition too many in loop
+    blockcount--; //Last sent data block is empty
     t.join();
     EXPECT_EQ(blockcount, NUM_OF_BLOCKS);
 }
@@ -391,7 +413,7 @@ TEST(TTFTPreceiver, lastBlockACKHalfFilled_Client)
     EXPECT_EQ(blockcount, NUM_OF_BLOCKS + 1);
 }
 
-//Test if correct number of ACKs is sent, in the server case (address of remote host is not known, first ACK is 1) when last block is full
+//Test if correct number of ACKs is sent, in the client case (address of remote host is not known, first ACK is 1) when last block is full
 TEST(TTFTPreceiver, lastBlockACKFullFilled_Client)
 {
     boost::asio::io_context testIoContext;
@@ -457,7 +479,28 @@ TEST(TTFTPreceiver, lastBlockACKFullFilled_Client)
         EXPECT_EQ(equalACK, true);
         blockcount++;
     }
+
+    //Send 0 size data last, so the remote knows transfer is done:
+    //fill and send current block from ofsinout before reading ACK
+    std::array<char, 512 + CONTROLBYTES> sendbuffer;
+    sendbuffer.fill(0);
+    *reinterpret_cast<uint16_t*>(sendbuffer.data()) = htons(static_cast<uint16_t>(TftpOpcode::DATA));
+    *reinterpret_cast<uint16_t*>(sendbuffer.data() + CONTROLBYTES/2) = htons(blockcount);
+
+    std::size_t blockbytes = 0;
+    testRemoteConnSocket.send_to(boost::asio::buffer(sendbuffer, CONTROLBYTES + blockbytes), localsenderendpoint);
+
+    buffer.fill(0);
+    testRemoteConnSocket.receive_from(boost::asio::buffer(buffer, buffer.size()), localsenderendpoint);
+    //(mStrand, filename_to_read, mode, remoteaddress, port, DEFAULT_BLOCKSIZE
+    bool equalControlInfo = ntohs(*reinterpret_cast<uint16_t*>(buffer.data())) == static_cast<uint16_t>(TftpOpcode::ACK);
+    bool equalACK = ntohs(*reinterpret_cast<uint16_t*>(buffer.data() + CONTROLBYTES/2)) == blockcount;
+    EXPECT_EQ(equalControlInfo, true);
+    EXPECT_EQ(equalACK, true);
+    blockcount++;
+
     blockcount--; //One addition too many in loop
+    blockcount--; //Last sent data block is empty
     t.join();
     EXPECT_EQ(blockcount, NUM_OF_BLOCKS);
 }
@@ -485,7 +528,7 @@ TEST(TTFTPreceiver, outputFileCorrectHalfFilledLast_Server)
 
     std::shared_ptr<std::ostream> ofs = std::make_shared<std::ostringstream>(std::ios_base::binary | std::ios_base::app);
 
-    std::shared_ptr<TftpReceiver> testReceiver = std::make_shared<TftpReceiver>(std::move(receiverSock), ofs, str2mode(testmode), testRemoteEndpoint.address(), testport, dummyCallback);
+    std::shared_ptr<TftpReceiver> testReceiver = std::make_shared<TftpReceiver>(std::move(receiverSock), ofs, str2mode(testmode), boost::asio::ip::make_address("127.0.0.1"), testport, dummyCallback);
 
 
 
@@ -583,7 +626,7 @@ TEST(TTFTPreceiver, outputFileCorrectFullFilledLast_Server)
 
     std::shared_ptr<std::ostream> ofs = std::make_shared<std::ostringstream>(std::ios_base::binary | std::ios_base::app);
 
-    std::shared_ptr<TftpReceiver> testReceiver = std::make_shared<TftpReceiver>(std::move(receiverSock), ofs, str2mode(testmode), testRemoteEndpoint.address(), testport, dummyCallback);
+    std::shared_ptr<TftpReceiver> testReceiver = std::make_shared<TftpReceiver>(std::move(receiverSock), ofs, str2mode(testmode), boost::asio::ip::make_address("127.0.0.1"), testport, dummyCallback);
 
 
     //fill buffer with each data block from ofsinput and sent messages till all data blocks are exhausted
@@ -634,7 +677,27 @@ TEST(TTFTPreceiver, outputFileCorrectFullFilledLast_Server)
         EXPECT_EQ(equalControlInfo, true);
         EXPECT_EQ(equalACK, true);
     }
+    //Send 0 size data last, so the remote knows transfer is done:
+    //fill and send current block from ofsinout before reading ACK
+    std::array<char, 512 + CONTROLBYTES> sendbuffer;
+    sendbuffer.fill(0);
+    *reinterpret_cast<uint16_t*>(sendbuffer.data()) = htons(static_cast<uint16_t>(TftpOpcode::DATA));
+    *reinterpret_cast<uint16_t*>(sendbuffer.data() + CONTROLBYTES/2) = htons(blockcount);
+
+    std::size_t blockbytes = 0;
+    testRemoteConnSocket.send_to(boost::asio::buffer(sendbuffer, CONTROLBYTES + blockbytes), localsenderendpoint);
+
+    buffer.fill(0);
+    testRemoteConnSocket.receive_from(boost::asio::buffer(buffer, buffer.size()), localsenderendpoint);
+    //(mStrand, filename_to_read, mode, remoteaddress, port, DEFAULT_BLOCKSIZE
+    bool equalControlInfo = ntohs(*reinterpret_cast<uint16_t*>(buffer.data())) == static_cast<uint16_t>(TftpOpcode::ACK);
+    bool equalACK = ntohs(*reinterpret_cast<uint16_t*>(buffer.data() + CONTROLBYTES/2)) == blockcount;
+    EXPECT_EQ(equalControlInfo, true);
+    EXPECT_EQ(equalACK, true);
+    blockcount++;
+
     blockcount--; //One addition too many in loop
+    blockcount--; //Last block is empty
     t.join();
     EXPECT_EQ(blockcount, NUM_OF_BLOCKS);
 
@@ -650,7 +713,7 @@ TEST(TTFTPreceiver, outputFileCorrectFullFilledLast_Server)
             pos++;
         }
     }
-    EXPECT_EQ(pos, blockcount * 512); //last block not full
+    EXPECT_EQ(pos, blockcount * 512); //last block full
 }
 
 //Test if output file is filled with correct data contents, with half block last block, for client case (first ACK 1)
@@ -801,7 +864,27 @@ TEST(TTFTPreceiver, outputFileCorrectFullFilledLast_Client)
         EXPECT_EQ(equalControlInfo, true);
         EXPECT_EQ(equalACK, true);
     }
+    //Send 0 size data last, so the remote knows transfer is done:
+    //fill and send current block from ofsinout before reading ACK
+    std::array<char, 512 + CONTROLBYTES> sendbuffer;
+    sendbuffer.fill(0);
+    *reinterpret_cast<uint16_t*>(sendbuffer.data()) = htons(static_cast<uint16_t>(TftpOpcode::DATA));
+    *reinterpret_cast<uint16_t*>(sendbuffer.data() + CONTROLBYTES/2) = htons(blockcount);
+
+    std::size_t blockbytes = 0;
+    testRemoteConnSocket.send_to(boost::asio::buffer(sendbuffer, CONTROLBYTES + blockbytes), localsenderendpoint);
+
+    buffer.fill(0);
+    testRemoteConnSocket.receive_from(boost::asio::buffer(buffer, buffer.size()), localsenderendpoint);
+    //(mStrand, filename_to_read, mode, remoteaddress, port, DEFAULT_BLOCKSIZE
+    bool equalControlInfo = ntohs(*reinterpret_cast<uint16_t*>(buffer.data())) == static_cast<uint16_t>(TftpOpcode::ACK);
+    bool equalACK = ntohs(*reinterpret_cast<uint16_t*>(buffer.data() + CONTROLBYTES/2)) == blockcount;
+    EXPECT_EQ(equalControlInfo, true);
+    EXPECT_EQ(equalACK, true);
+    blockcount++;
+
     blockcount--; //One addition too many in loop
+    blockcount--; //Last block is empty
     t.join();
     EXPECT_EQ(blockcount, NUM_OF_BLOCKS);
 
@@ -817,7 +900,7 @@ TEST(TTFTPreceiver, outputFileCorrectFullFilledLast_Client)
             pos++;
         }
     }
-    EXPECT_EQ(pos, blockcount * 512); //last block not full
+    EXPECT_EQ(pos, blockcount * 512); //last block full
 }
 
 //Test if the ACK is resent when an already ACKnowledged data block is sent again
@@ -844,7 +927,7 @@ TEST(TTFTPreceiver, ACKresentAtOldDataBlock)
 
     std::shared_ptr<std::ostream> ofs = std::make_shared<std::ostringstream>(std::ios_base::binary | std::ios_base::app);
 
-    std::shared_ptr<TftpReceiver> testReceiver = std::make_shared<TftpReceiver>(std::move(receiverSock), ofs, str2mode(testmode), testRemoteEndpoint.address(), testport, dummyCallback);
+    std::shared_ptr<TftpReceiver> testReceiver = std::make_shared<TftpReceiver>(std::move(receiverSock), ofs, str2mode(testmode), boost::asio::ip::make_address("127.0.0.1"), testport, dummyCallback);
     testReceiver->start();
 
     std::thread t([&testIoContext] () {testIoContext.run();});
@@ -916,7 +999,7 @@ TEST(TTFTPreceiver, ErrorOnDataBlockIDTooLarge)
 
     std::shared_ptr<std::ostream> ofs = std::make_shared<std::ostringstream>(std::ios_base::binary | std::ios_base::app);
 
-    std::shared_ptr<TftpReceiver> testReceiver = std::make_shared<TftpReceiver>(std::move(receiverSock), ofs, str2mode(testmode), testRemoteEndpoint.address(), testport, dummyCallback);
+    std::shared_ptr<TftpReceiver> testReceiver = std::make_shared<TftpReceiver>(std::move(receiverSock), ofs, str2mode(testmode), boost::asio::ip::make_address("127.0.0.1"), testport, dummyCallback);
     testReceiver->start();
 
     std::thread t([&testIoContext] () {testIoContext.run();});
@@ -984,7 +1067,7 @@ TEST(TTFTPreceiver, ACKResentOnTimeout)
 
     std::shared_ptr<std::ostream> ofs = std::make_shared<std::ostringstream>(std::ios_base::binary | std::ios_base::app);
 
-    std::shared_ptr<TftpReceiver> testSender = std::make_shared<TftpReceiver>(std::move(receiverSock), ofs, str2mode(testmode), testRemoteEndpoint.address(), testport, dummyCallback);
+    std::shared_ptr<TftpReceiver> testSender = std::make_shared<TftpReceiver>(std::move(receiverSock), ofs, str2mode(testmode), boost::asio::ip::make_address("127.0.0.1"), testport, dummyCallback);
     testSender->start();
     std::thread t([&testIoContext] () {testIoContext.run();});
 
@@ -1045,7 +1128,7 @@ TEST(TTFTPreceiver, ConnectioncloseAfterTimeouts)
 
     std::shared_ptr<std::ostream> ofs = std::make_shared<std::ostringstream>(std::ios_base::binary | std::ios_base::app);
 
-    std::shared_ptr<TftpReceiver> testSender = std::make_shared<TftpReceiver>(std::move(receiverSock), ofs, str2mode(testmode), testRemoteEndpoint.address(), testport, dummyCallback);
+    std::shared_ptr<TftpReceiver> testSender = std::make_shared<TftpReceiver>(std::move(receiverSock), ofs, str2mode(testmode), boost::asio::ip::make_address("127.0.0.1"), testport, dummyCallback);
     testSender->start();
     std::thread t([&testIoContext] () {testIoContext.run();});
 
