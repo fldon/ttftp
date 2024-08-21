@@ -45,8 +45,6 @@ void Tftpsender::start()
 
 void Tftpsender::sendNextBlock()
 {
-    //Start with block 1 of data, then keep sending new block whenever ack for that block comes
-    //Resend last block after timeout
     input->seekg((lastsentdatacount - 1) * blocksize);
     if(input)
     {
@@ -62,8 +60,9 @@ void Tftpsender::sendNextBlock()
     auto readbytes = input->gcount();
     if(!sendingdone)
     {
-        DataMessage msg_to_send(blocksize);
-        msg_to_send.setData(lastsentdata);
+        DataMessage msg_to_send(readbytes);
+        //Use only the part of lastsentdata that was actually just read from file: (important for last block)
+        msg_to_send.setData(std::vector<char>(lastsentdata.begin(), lastsentdata.begin()+readbytes));
         msg_to_send.setBlockNr(lastsentdatacount);
         std::shared_ptr<std::string> str_to_send = std::make_shared<std::string>(msg_to_send.encode());
 
@@ -107,6 +106,7 @@ void Tftpsender::checkAckForLastBlock(boost::system::error_code err, std::size_t
             uint16_t ack_block = received_msg.getBlockNr();
             if(ack_block < lastsentdatacount)
             {
+                //Resends the current block
                 sendNextBlock();
             }
             //Received the ack we were waiting for
