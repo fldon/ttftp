@@ -4,7 +4,7 @@
 #include <iostream>
 
 Tftpsender::Tftpsender(boost::asio::ip::udp::socket &&INsocket, std::shared_ptr<std::istream> inputstream, TftpMode INmode, const boost::asio::ip::address &INremoteaddress, uint16_t port, std::function<void(std::shared_ptr<Tftpsender>, boost::system::error_code)> INOperationDoneCallback, std::size_t INblocksize)
-    :Tftpsender(std::forward<boost::asio::ip::udp::socket>(INsocket), inputstream, INmode, INOperationDoneCallback, INblocksize)
+    :Tftpsender(std::move(INsocket), inputstream, INmode, INOperationDoneCallback, INblocksize)
 {
     mLastReceivedReceiverEndpoint = boost::asio::ip::udp::endpoint(INremoteaddress, port);
     onConnect();

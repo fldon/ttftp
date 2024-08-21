@@ -2,7 +2,7 @@
 #include "tftphelpdefs.h"
 
 TftpReceiver::TftpReceiver(boost::asio::ip::udp::socket &&INsocket, std::shared_ptr<std::ostream> outputstream, TftpMode INmode, const boost::asio::ip::address &remoteaddress, uint16_t port, std::function<void(std::shared_ptr<TftpReceiver>, boost::system::error_code)> INoperationDoneCallback, std::size_t INblocksize)
-    :TftpReceiver(std::forward<boost::asio::ip::udp::socket>(INsocket), outputstream, INmode, INoperationDoneCallback, INblocksize)
+    :TftpReceiver(std::move(INsocket), outputstream, INmode, INoperationDoneCallback, INblocksize)
 {
     mLastReceivedSenderEndpoint = boost::asio::ip::udp::endpoint(remoteaddress, port);
     onConnect();
