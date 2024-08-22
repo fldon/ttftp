@@ -136,7 +136,8 @@ DataMessage::DataMessage(std::size_t IN_blocksize)
 bool DataMessage::decode(const std::string &IN_dataStr)
 {
     //TODO: How to handle the case where more block data is sent than mBlocksize? Check sizes and throw exception? Or return false?
-    if(IN_dataStr.size() != mBlocksize + CONTROLBYTES)
+    //Block can be partially filled, even empty (except for control info)
+    if(IN_dataStr.size() > mBlocksize + CONTROLBYTES || IN_dataStr.size() < CONTROLBYTES)
         return false;
 
     //read opcode (2 bytes):

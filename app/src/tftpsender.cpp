@@ -58,28 +58,25 @@ void Tftpsender::sendNextBlock()
         endOperation();
     }
     auto readbytes = input->gcount();
-    if(!sendingdone)
-    {
-        DataMessage msg_to_send(readbytes);
-        //Use only the part of lastsentdata that was actually just read from file: (important for last block)
-        msg_to_send.setData(std::vector<char>(lastsentdata.begin(), lastsentdata.begin()+readbytes));
-        msg_to_send.setBlockNr(lastsentdatacount);
-        std::shared_ptr<std::string> str_to_send = std::make_shared<std::string>(msg_to_send.encode());
+    DataMessage msg_to_send(readbytes);
+    //Use only the part of lastsentdata that was actually just read from file: (important for last block)
+    msg_to_send.setData(std::vector<char>(lastsentdata.begin(), lastsentdata.begin()+readbytes));
+    msg_to_send.setBlockNr(lastsentdatacount);
+    std::shared_ptr<std::string> str_to_send = std::make_shared<std::string>(msg_to_send.encode());
 
-        auto self = shared_from_this();
-        remoteConnSocket.async_send_to(boost::asio::buffer(*str_to_send, str_to_send->size()), mReceiverEndpoint, [self, str_to_send](boost::system::error_code err, std::size_t sentbytes)
+    auto self = shared_from_this();
+    remoteConnSocket.async_send_to(boost::asio::buffer(*str_to_send, str_to_send->size()), mReceiverEndpoint, [self, str_to_send](boost::system::error_code err, std::size_t sentbytes)
+                                   {
+                                       if(!err && sentbytes != 0)
                                        {
-                                           if(!err && sentbytes != 0)
-                                           {
-                                               self->readTimeoutTimer.expires_from_now(boost::posix_time::seconds(RETRANSMISSION_TIME));
-                                               self->readTimeoutTimer.async_wait(std::bind(&Tftpsender::handleReadTimeout, self, boost::asio::placeholders::error));
-                                               self->startNextReceive();
-                                           }
-                                       });
-        if(readbytes < blocksize)
-        {
-            sendingdone = true;
-        }
+                                           self->readTimeoutTimer.expires_from_now(boost::posix_time::seconds(RETRANSMISSION_TIME));
+                                           self->readTimeoutTimer.async_wait(std::bind(&Tftpsender::handleReadTimeout, self, boost::asio::placeholders::error));
+                                           self->startNextReceive();
+                                       }
+                                   });
+    if(readbytes < blocksize)
+    {
+        sendingdone = true;
     }
 }
 

@@ -474,6 +474,7 @@ TEST(TTFTPClient, CorrectCallbackOnFinish)
 
             else
             {
+                //TODO: construction of this test means that the client has to re-send the last data block because we start read only after the send ...
                 DataMessage received_data;
                 if(received_data.decode(std::string(buffer.data(), buffer.data() + sent_data.get())))
                 {
