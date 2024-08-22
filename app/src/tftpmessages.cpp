@@ -35,6 +35,21 @@ bool RequestMessage::decode(const std::string &IN_requestStr)
     if(mMode == TftpMode::INVALID)
         return false;
 
+    //start reading array of 0-terminated option-value pairs
+    std::size_t next_str_begin_idx = OPCODELENGTH + mFilename.size() + 1 + mode.size() + 1;
+    while(next_str_begin_idx < IN_requestStr.size())
+    {
+        std::string option = reinterpret_cast<const char*>(IN_requestStr.data() + next_str_begin_idx);
+        next_str_begin_idx += 2; //skip 0 termination
+
+        //Invalid option field: value is missing for this option
+        if(next_str_begin_idx >=  IN_requestStr.size())
+            return false;
+
+        std::string value = reinterpret_cast<const char*>(IN_requestStr.data() + next_str_begin_idx);
+        next_str_begin_idx += 2; //skip 0 termination
+        mOptionValues[option] = value;
+    }
     //Everything could be parsed, good to go
     return true;
 }
@@ -51,7 +66,14 @@ std::string RequestMessage::encode() const
 
     std::string modestr = mode2str(mMode);
 
-    int message_length = OPCODELENGTH + mFilename.size()+1 + modestr.size()+1;
+    int optionValLength = 0;
+    for(auto &optVal : mOptionValues)
+    {
+        //the +1 are for the deliminating 0
+        optionValLength += optVal.first.size() + 1 + optVal.second.size() + 1;
+    }
+
+    int message_length = OPCODELENGTH + mFilename.size()+1 + modestr.size()+1 + optionValLength;
     std::vector<unsigned char> IObuffer(message_length, 0);
 
     auto it = IObuffer.begin();
@@ -70,6 +92,19 @@ std::string RequestMessage::encode() const
     it = std::copy(modestr.begin(), modestr.end(), it);
     *it = 0;
     ++it;
+
+    //Option Value pairs (both pair partners as string, 0 terminated)
+    for(auto &optVal : mOptionValues)
+    {
+        it = std::copy(optVal.first.begin(), optVal.first.end(), it);
+        *it = 0;
+        ++it;
+
+        it = std::copy(optVal.second.begin(), optVal.second.end(), it);
+        *it = 0;
+        ++it;
+    }
+
     assert(it == IObuffer.end());
 
     return std::string(IObuffer.begin(), IObuffer.end());
@@ -119,6 +154,25 @@ void RequestMessage::setMode(const TftpMode &IN_mode)
 TftpMode RequestMessage::getMode() const
 {
     return mMode;
+}
+
+void RequestMessage::setOptVals(const std::map<std::string, std::string> &IN_optVals)
+{
+    mOptionValues = IN_optVals;
+}
+
+void RequestMessage::setOptVals(const std::map<std::string, std::string> &&IN_optVals)
+{
+    mOptionValues = std::move(IN_optVals);
+}
+
+std::map<std::string, std::string>& RequestMessage::getOptVals()
+{
+    return mOptionValues;
+}
+const std::map<std::string, std::string>& RequestMessage::getOptVals() const
+{
+    return mOptionValues;
 }
 
 DataMessage::DataMessage(std::size_t IN_blocksize)

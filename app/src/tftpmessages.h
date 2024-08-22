@@ -4,6 +4,7 @@
 #include "tftphelpdefs.h"
 #include <stdexcept>
 #include <vector>
+#include <map>
 
 class ITftpMessage
 {
@@ -19,6 +20,7 @@ protected:
 };
 
 //Uses opcode 01 or 02, includes filename and mode string, plus 2 padding bytes
+//rfc2347: also add arbitrary amount of 0-terminated "optname, optvalue"-pairs
 class RequestMessage : public ITftpMessage
 {
 public:
@@ -38,9 +40,17 @@ public:
     void setMode(const TftpMode &IN_mode);
     [[nodiscard]] TftpMode getMode() const;
 
+    void setOptVals(const std::map<std::string, std::string> &IN_optVals);
+    void setOptVals(const std::map<std::string, std::string> &&IN_optVals);
+    [[nodiscard]] std::map<std::string, std::string>& getOptVals();
+    [[nodiscard]] const std::map<std::string, std::string>& getOptVals() const;
+
 private:
     std::string mFilename{""};
     TftpMode mMode{TftpMode::INVALID};
+
+    //rfc2347
+    std::map<std::string, std::string> mOptionValues;
 };
 
 class DataMessage : public ITftpMessage
