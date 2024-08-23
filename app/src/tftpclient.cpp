@@ -22,6 +22,7 @@
  * */
 
 
+//TODO: add possibility of sending option-value pairs in request (and then wait until timeout for OPTACK and enable only the ACKed options for the transfer process)
 TftpClient::TftpClient(std::string INrootfolder, boost::asio::io_context &ctx)
     :
     mIoContext(ctx),
@@ -96,7 +97,8 @@ void TftpClient::start(boost::asio::ip::address server_address, TftpOpcode reque
 
         std::shared_ptr<std::istream> ifs = std::make_shared<std::ifstream>(filepath_to_read, std::ios_base::binary);
 
-        std::shared_ptr<Tftpsender> sender = std::make_shared<Tftpsender>(std::move(sock), ifs, transfermode, std::bind(&TftpClient::on_sender_done, this, std::placeholders::_1, std::placeholders::_2) ,DEFAULT_BLOCKSIZE);
+        constexpr int ACK_TO_WAIT_FOR = 0;
+        std::shared_ptr<Tftpsender> sender = std::make_shared<Tftpsender>(std::move(sock), ifs, transfermode, ACK_TO_WAIT_FOR, std::bind(&TftpClient::on_sender_done, this, std::placeholders::_1, std::placeholders::_2) ,DEFAULT_BLOCKSIZE);
         mTransfer_running = true;
         mTransferDoneCallback = on_finish_callback;
         sender->start();

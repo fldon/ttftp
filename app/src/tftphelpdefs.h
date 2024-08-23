@@ -3,8 +3,9 @@
 
 #include <cstdint>
 #include <string>
+#include <map>
 
-enum class TftpOpcode {INVALID = 0, RRQ = 1, WRQ, DATA, ACK, ERROR};
+enum class TftpOpcode {INVALID = 0, RRQ = 1, WRQ, DATA, ACK, ERROR, OACK};
 constexpr uint16_t LAST_VALID_OPCODE_NR = static_cast<uint16_t>(TftpOpcode::ERROR);
 enum class TftpMode {INVALID, OCTET};
 
@@ -13,6 +14,8 @@ enum class TftpMode {INVALID, OCTET};
 
 using block_nr_t = uint16_t;
 using error_code_t = uint16_t;
+
+enum class TftpErrorCode : error_code_t {ERR_REQUSET = 4, ERR_OPT_NEGOTIATION = 8};
 
 constexpr uint16_t CONTROLBYTES = 4;
 constexpr uint16_t OPCODELENGTH = 2;
@@ -26,5 +29,20 @@ constexpr std::size_t DEFAULT_BLOCKSIZE = 512;
 
 //WORKAROUND!!!!
 constexpr uint16_t SERVER_LISTEN_PORT = 44500; //for debug: binding to port 69 does not work for some reason
+
+//Encapsules all possible options for a transmission
+//Gets set by client using option field in request
+struct TransactionOptionValues
+{
+    //Only for server use
+    bool wasSetByClient;
+
+    std::size_t mBlocksize{DEFAULT_BLOCKSIZE};
+
+
+    [[nodiscard]] std::map<std::string, std::string> getOptionsAsMap() const;
+    void setOptionsFromMap(const std::map<std::string, std::string>& IN_map);
+};
+
 
 #endif // TFTPHELPDEFS_H

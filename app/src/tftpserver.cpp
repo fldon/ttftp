@@ -27,9 +27,9 @@
 //At creation of server, start listening on Port 69
 TftpServer::TftpServer(std::string INrootfolder, boost::asio::io_context &ctx)
     :   mIoContext(ctx),
-        mStrand(boost::asio::make_strand(mIoContext)),
-        mAccSocket(mStrand, boost::asio::ip::udp::endpoint(boost::asio::ip::udp::v4(), SERVER_LISTEN_PORT)),
-        rootfolder(INrootfolder)
+    mStrand(boost::asio::make_strand(mIoContext)),
+    mAccSocket(mStrand, boost::asio::ip::udp::endpoint(boost::asio::ip::udp::v4(), SERVER_LISTEN_PORT)),
+    rootfolder(INrootfolder)
 {
     buffer.fill(0);
     mAccSocket.async_receive_from(boost::asio::buffer(buffer, BUFSIZE),
@@ -51,7 +51,7 @@ void TftpServer::HandleRequest(boost::system::error_code err, std::size_t receiv
     {
         if(receivedbytes < 2)
         {
-            sendErrorMsg(4, "Did not receive a valid opcode");
+            sendErrorMsg(TftpErrorCode::ERR_REQUSET, "Did not receive a valid opcode");
         }
 
         RequestMessage received_msg;
@@ -59,7 +59,7 @@ void TftpServer::HandleRequest(boost::system::error_code err, std::size_t receiv
 
         if(!valid_request)
         {
-            sendErrorMsg(4, "Did not receive a valid request message. Opcode or mode were not recognized");
+            sendErrorMsg(TftpErrorCode::ERR_REQUSET, "Did not receive a valid request message. Opcode or mode were not recognized");
         }
 
         if(received_msg.isRRQ())
@@ -94,9 +94,38 @@ void TftpServer::HandleSubRequest_RRQ(const RequestMessage &request)
 
     boost::asio::ip::udp::socket newsock(mStrand, boost::asio::ip::udp::v4());
 
+    //handle option fields:
+    //Check all options and values against list of known options
+    //Then enable them for this transfer
+    //Then send an OPTACK (on new socket!)
+    //Then after receiving OPTACK, client sends ACK 0, so we need to prepare the sender to expect an ACK 0 before sending the first data packet
+
+    std::optional<TransactionOptionValues> valuesFromClientRequest = parseOptionFields(request);
+    //if optional is not set: that means values were not valid: send error message over the socket
+    //if optional is set: give it to sender
+    //if wasSetByClient in transvals is set, expect ACK 0 and send OPTACK from new socket, otherwise ACK 1 and send nothing extra
+    int expected_ack = 1;
+    if(valuesFromClientRequest)
+    {
+        if(valuesFromClientRequest.value().wasSetByClient)
+        {
+            OptionACKMessage msg_opt_ack_response;
+            msg_opt_ack_response.setOptVals(valuesFromClientRequest->getOptionsAsMap());
+            expected_ack = 0;
+            //Then send an OPTACK (on new socket)
+            std::string message_to_send = msg_opt_ack_response.encode();
+            newsock.send_to(boost::asio::buffer(message_to_send, message_to_send.size()), currAccEndpoint);
+        }
+    }
+    else
+    {
+        //send error to peer over the new socket and terminate transaction
+        sendErrorMsg(TftpErrorCode::ERR_OPT_NEGOTIATION, "Option negotiation error: one of the option fields contained an invalid value");
+    }
+
     std::shared_ptr<std::istream> ifs(new std::ifstream(filename_to_read, std::ios_base::binary));
 
-    std::shared_ptr<Tftpsender> sender = std::make_shared<Tftpsender>(std::move(newsock), ifs, str2mode(mode), remoteaddress, remoteport, std::bind(&TftpServer::removeSenderFromList, this, std::placeholders::_1), DEFAULT_BLOCKSIZE);
+    std::shared_ptr<Tftpsender> sender = std::make_shared<Tftpsender>(std::move(newsock), ifs, str2mode(mode), remoteaddress, remoteport, expected_ack, std::bind(&TftpServer::removeSenderFromList, this, std::placeholders::_1), valuesFromClientRequest.value().mBlocksize);
     mSenderList.push_back(sender);
     sender->start();
 }
@@ -114,16 +143,47 @@ void TftpServer::HandleSubRequest_WRQ(const RequestMessage &request)
 
     boost::asio::ip::udp::socket newsock(mStrand, boost::asio::ip::udp::v4());
 
+
+    //handle option fields:
+    //Check all options and values against list of known options
+    //Then enable them for this transfer
+    //Then send an OPTACK
+    //Then after receiving OPTACK, client sends Data packet 1 with the negotiated values, so the receiver needs to have the correct settings, but otherwise same behavior as before
+
+    std::optional<TransactionOptionValues> valuesFromClientRequest = parseOptionFields(request);
+    //if optional is not set: that means values were not valid: send error message over the socket
+    //if optional is set: give it to sender
+    if(valuesFromClientRequest)
+    {
+        if(valuesFromClientRequest.value().wasSetByClient)
+        {
+            OptionACKMessage msg_opt_ack_response;
+            msg_opt_ack_response.setOptVals(valuesFromClientRequest->getOptionsAsMap());
+            //Then send an OPTACK (on new socket)
+            std::string message_to_send = msg_opt_ack_response.encode();
+            newsock.send_to(boost::asio::buffer(message_to_send, message_to_send.size()), currAccEndpoint);
+        }
+    }
+    else
+    {
+        //send error to peer over the new socket and terminate transaction
+        sendErrorMsg(TftpErrorCode::ERR_OPT_NEGOTIATION, "Option negotiation error: one of the option fields contained an invalid value");
+    }
+
     std::shared_ptr<std::ostream> ofs(new std::ofstream(filename_to_write, std::ios_base::binary | std::ios_base::app));
 
-    std::shared_ptr<TftpReceiver> receiver = std::make_shared<TftpReceiver>(std::move(newsock), ofs, str2mode(mode), remoteaddress, remoteport, std::bind(&TftpServer::removeReceiverFromList, this, std::placeholders::_1) ,DEFAULT_BLOCKSIZE);
+    std::shared_ptr<TftpReceiver> receiver = std::make_shared<TftpReceiver>(std::move(newsock), ofs, str2mode(mode), remoteaddress, remoteport, std::bind(&TftpServer::removeReceiverFromList, this, std::placeholders::_1) ,valuesFromClientRequest.value().mBlocksize);
     mReceiverList.push_back(receiver);
     receiver->start();
 }
 
-void TftpServer::sendErrorMsg(uint16_t errorcode, std::string msg)
+void TftpServer::sendErrorMsg(TftpErrorCode errorcode, std::string msg)
 {
-    //TODO:
+    ErrorMessage err_msg;
+    err_msg.setErrorCode(static_cast<error_code_t>(errorcode));
+    err_msg.setErrorMsg(msg);
+    std::string message_to_send = err_msg.encode();
+    mAccSocket.send_to(boost::asio::buffer(message_to_send, message_to_send.size()), currAccEndpoint);
 }
 
 TftpServer::~TftpServer()
@@ -144,3 +204,20 @@ void TftpServer::removeSenderFromList(std::shared_ptr<Tftpsender> senderToRemove
     //depends on equality operator working as expected for shared-ptrs
     mSenderList.erase(std::remove(mSenderList.begin(), mSenderList.end(), senderToRemove), mSenderList.end());
 }
+
+/*!
+ * \brief Check all options and values against list of known options.
+ *   Then fill TransactionOptionValues struct with these options.
+ *   For not-set-options in message, use defaults.
+ *
+ *   If any value is not valid for its option in the request: do not set the optional.
+ * \param request
+ * \return
+ */
+std::optional<TransactionOptionValues> TftpServer::parseOptionFields(const RequestMessage &request)
+{
+    TransactionOptionValues ret_val;
+
+    return ret_val;
+}
+

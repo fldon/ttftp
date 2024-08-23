@@ -44,7 +44,8 @@ TEST(TTFTPSender, FirstBlockAfterStart_Server)
 
     std::shared_ptr<std::istream> ifs = std::make_shared<std::istringstream>(ofs.str(), std::ios_base::binary);
 
-    std::shared_ptr<Tftpsender> testSender = std::make_shared<Tftpsender>(std::move(senderSock), ifs, str2mode(testmode), boost::asio::ip::make_address("127.0.0.1"), testport, dummyCallback);
+    constexpr int EXPECTED_FIRST_ACK = 1; //server, so we expect ack 0 from client
+    std::shared_ptr<Tftpsender> testSender = std::make_shared<Tftpsender>(std::move(senderSock), ifs, str2mode(testmode), boost::asio::ip::make_address("127.0.0.1"), testport, EXPECTED_FIRST_ACK, dummyCallback);
 
 
 
@@ -106,7 +107,8 @@ TEST(TTFTPSender, FirstBlockAfterStart_Client)
 
     std::shared_ptr<std::istream> ifs = std::make_shared<std::istringstream>(ofs.str(), std::ios_base::binary);
 
-    std::shared_ptr<Tftpsender> testSender = std::make_shared<Tftpsender>(std::move(senderSock), ifs, str2mode(testmode), dummyCallback);
+    constexpr int EXPECTED_FIRST_ACK = 0; //client, so we expect ack 0 from server
+    std::shared_ptr<Tftpsender> testSender = std::make_shared<Tftpsender>(std::move(senderSock), ifs, str2mode(testmode), EXPECTED_FIRST_ACK, dummyCallback);
 
 
 
@@ -173,7 +175,8 @@ TEST(TTFTPSender, CorrectAmountofTotalBlocksSent)
 
     std::shared_ptr<std::istream> ifs = std::make_shared<std::istringstream>(ofs.str(), std::ios_base::binary);
 
-    std::shared_ptr<Tftpsender> testSender = std::make_shared<Tftpsender>(std::move(senderSock), ifs, str2mode(testmode), boost::asio::ip::make_address("127.0.0.1"), testport, dummyCallback);
+    constexpr int EXPECTED_FIRST_ACK = 1; //server, so we expect ack 0 from client
+    std::shared_ptr<Tftpsender> testSender = std::make_shared<Tftpsender>(std::move(senderSock), ifs, str2mode(testmode), boost::asio::ip::make_address("127.0.0.1"), testport, EXPECTED_FIRST_ACK, dummyCallback);
 
 
     //Ignore first ack 0 of the server-sender
@@ -243,7 +246,8 @@ TEST(TTFTPSender, CorrectLastBlockSent_FullBlock_Server)
 
     std::shared_ptr<std::istream> ifs = std::make_shared<std::istringstream>(ofs.str(), std::ios_base::binary);
 
-    std::shared_ptr<Tftpsender> testSender = std::make_shared<Tftpsender>(std::move(senderSock), ifs, str2mode(testmode), boost::asio::ip::make_address("127.0.0.1"), testport, dummyCallback);
+    constexpr int EXPECTED_FIRST_ACK = 1; //server, so we expect ack 0 from client
+    std::shared_ptr<Tftpsender> testSender = std::make_shared<Tftpsender>(std::move(senderSock), ifs, str2mode(testmode), boost::asio::ip::make_address("127.0.0.1"), testport, EXPECTED_FIRST_ACK, dummyCallback);
 
 
     //Ignore first ack 0 of the server-sender
@@ -321,7 +325,8 @@ TEST(TTFTPSender, CorrectLastBlockSent_HalfBlock_Server)
 
     std::shared_ptr<std::istream> ifs = std::make_shared<std::istringstream>(ofs.str(), std::ios_base::binary);
 
-    std::shared_ptr<Tftpsender> testSender = std::make_shared<Tftpsender>(std::move(senderSock), ifs, str2mode(testmode), boost::asio::ip::make_address("127.0.0.1"), testport, dummyCallback);
+    constexpr int EXPECTED_FIRST_ACK = 1; //server, so we expect ack 0 from client
+    std::shared_ptr<Tftpsender> testSender = std::make_shared<Tftpsender>(std::move(senderSock), ifs, str2mode(testmode), boost::asio::ip::make_address("127.0.0.1"), testport, EXPECTED_FIRST_ACK, dummyCallback);
     testSender->start();
     std::thread t([&testIoContext] () {testIoContext.run();});
 
@@ -394,7 +399,8 @@ TEST(TTFTPSender, CompleteFileSentCorrectlyHalfBlock_Server)
 
     std::shared_ptr<std::istream> ifs = std::make_shared<std::istringstream>(ofs.str(), std::ios_base::binary);
 
-    std::shared_ptr<Tftpsender> testSender = std::make_shared<Tftpsender>(std::move(senderSock), ifs, str2mode(testmode), boost::asio::ip::make_address("127.0.0.1"), testport, dummyCallback);
+    constexpr int EXPECTED_FIRST_ACK = 1; //server, so we expect ack 0 from client
+    std::shared_ptr<Tftpsender> testSender = std::make_shared<Tftpsender>(std::move(senderSock), ifs, str2mode(testmode), boost::asio::ip::make_address("127.0.0.1"), testport, EXPECTED_FIRST_ACK, dummyCallback);
     testSender->start();
     std::thread t([&testIoContext] () {testIoContext.run();});
 
@@ -468,7 +474,8 @@ TEST(TTFTPSender, CompleteFileSentCorrectlyFullBlock_Server)
 
     std::shared_ptr<std::istream> ifs = std::make_shared<std::istringstream>(ofs.str(), std::ios_base::binary);
 
-    std::shared_ptr<Tftpsender> testSender = std::make_shared<Tftpsender>(std::move(senderSock), ifs, str2mode(testmode), boost::asio::ip::make_address("127.0.0.1"), testport, dummyCallback);
+    constexpr int EXPECTED_FIRST_ACK = 1; //server, so we expect ack 0 from client
+    std::shared_ptr<Tftpsender> testSender = std::make_shared<Tftpsender>(std::move(senderSock), ifs, str2mode(testmode), boost::asio::ip::make_address("127.0.0.1"), testport, EXPECTED_FIRST_ACK, dummyCallback);
     testSender->start();
     std::thread t([&testIoContext] () {testIoContext.run();});
 
@@ -542,7 +549,8 @@ TEST(TTFTPSender, CorrectLastBlockSent_FullBlock_Client)
 
     std::shared_ptr<std::istream> ifs = std::make_shared<std::istringstream>(ofs.str(), std::ios_base::binary);
 
-    std::shared_ptr<Tftpsender> testSender = std::make_shared<Tftpsender>(std::move(senderSock), ifs, str2mode(testmode), dummyCallback);
+    constexpr int EXPECTED_FIRST_ACK = 0; //client, so we expect ack 0 from server
+    std::shared_ptr<Tftpsender> testSender = std::make_shared<Tftpsender>(std::move(senderSock), ifs, str2mode(testmode), EXPECTED_FIRST_ACK, dummyCallback);
     testSender->start();
     std::thread t([&testIoContext] () {testIoContext.run();});
 
@@ -625,7 +633,8 @@ TEST(TTFTPSender, ResendWhenNoACK)
 
     std::shared_ptr<std::istream> ifs = std::make_shared<std::istringstream>(ofs.str(), std::ios_base::binary);
 
-    std::shared_ptr<Tftpsender> testSender = std::make_shared<Tftpsender>(std::move(senderSock), ifs, str2mode(testmode), boost::asio::ip::make_address("127.0.0.1"), testport, dummyCallback);
+    constexpr int EXPECTED_FIRST_ACK = 1; //server, so we expect ack 0 from client
+    std::shared_ptr<Tftpsender> testSender = std::make_shared<Tftpsender>(std::move(senderSock), ifs, str2mode(testmode), boost::asio::ip::make_address("127.0.0.1"), testport, EXPECTED_FIRST_ACK, dummyCallback);
     testSender->start();
     std::thread t([&testIoContext] () {testIoContext.run();});
 
@@ -692,7 +701,8 @@ TEST(TTFTPSender, ConnectioncloseAfterMultipleTimeouts)
 
     std::shared_ptr<std::istream> ifs = std::make_shared<std::istringstream>(ofs.str(), std::ios_base::binary);
 
-    std::shared_ptr<Tftpsender> testSender = std::make_shared<Tftpsender>(std::move(senderSock), ifs, str2mode(testmode), boost::asio::ip::make_address("127.0.0.1"), testport, dummyCallback);
+    constexpr int EXPECTED_FIRST_ACK = 1; //server, so we expect ack 0 from client
+    std::shared_ptr<Tftpsender> testSender = std::make_shared<Tftpsender>(std::move(senderSock), ifs, str2mode(testmode), boost::asio::ip::make_address("127.0.0.1"), testport, EXPECTED_FIRST_ACK, dummyCallback);
 
     testSender->start();
     std::thread t([&testIoContext] () {testIoContext.run();});
@@ -772,7 +782,8 @@ TEST(TTFTPSender, ResendWhenSmallerACK)
 
     std::shared_ptr<std::istream> ifs = std::make_shared<std::istringstream>(ofs.str(), std::ios_base::binary);
 
-    std::shared_ptr<Tftpsender> testSender = std::make_shared<Tftpsender>(std::move(senderSock), ifs, str2mode(testmode), boost::asio::ip::make_address("127.0.0.1"), testport, dummyCallback);
+    constexpr int EXPECTED_FIRST_ACK = 1; //server, so we expect ack 0 from client
+    std::shared_ptr<Tftpsender> testSender = std::make_shared<Tftpsender>(std::move(senderSock), ifs, str2mode(testmode), boost::asio::ip::make_address("127.0.0.1"), testport, EXPECTED_FIRST_ACK, dummyCallback);
 
     //Ignore Ack 0
     testSender->start();
@@ -854,7 +865,8 @@ TEST(TTFTPSender, ErrorWhenLargerACK)
 
     std::shared_ptr<std::istream> ifs = std::make_shared<std::istringstream>(ofs.str(), std::ios_base::binary);
 
-    std::shared_ptr<Tftpsender> testSender = std::make_shared<Tftpsender>(std::move(senderSock), ifs, str2mode(testmode), boost::asio::ip::make_address("127.0.0.1"), testport, dummyCallback);
+    constexpr int EXPECTED_FIRST_ACK = 1; //server, so we expect ack 0 from client
+    std::shared_ptr<Tftpsender> testSender = std::make_shared<Tftpsender>(std::move(senderSock), ifs, str2mode(testmode), boost::asio::ip::make_address("127.0.0.1"), testport, EXPECTED_FIRST_ACK, dummyCallback);
 
     testSender->start();
     std::thread t([&testIoContext] () {testIoContext.run();});

@@ -20,7 +20,6 @@ CppApplication {
         }
     }
 
-    cpp.cxxLanguageVersion: "c++14"
     cpp.dynamicLibraries: {
         var tmp = ["gtest", "gmock"];
         if (qbs.hostOS.contains("windows")) {

@@ -13,18 +13,20 @@ class Tftpsender : public std::enable_shared_from_this<Tftpsender>
 {
 public:
     //Ctor if remote endpoint is known (for server use)
-    Tftpsender(boost::asio::ip::udp::socket &&INsocket,
-        std::shared_ptr<std::istream> inputstream, TftpMode INmode,
-        const boost::asio::ip::address &remoteaddress,
-        uint16_t port,
-        std::function<void(std::shared_ptr<Tftpsender>, boost::system::error_code)> INoperationDoneCallback = [](std::shared_ptr<Tftpsender>, boost::system::error_code){},
-        std::size_t INblocksize = DEFAULT_BLOCKSIZE);
+    Tftpsender(boost::asio::ip::udp::socket &&IN_socket,
+        std::shared_ptr<std::istream> IN_inputstream, TftpMode IN_mode,
+        const boost::asio::ip::address &IN_remoteaddress,
+        uint16_t IN_port,
+        int IN_firstAck,
+        std::function<void(std::shared_ptr<Tftpsender>, boost::system::error_code)> IN_operationDoneCallback = [](std::shared_ptr<Tftpsender>, boost::system::error_code){},
+        std::size_t IN_blocksize = DEFAULT_BLOCKSIZE);
 
     //Ctor if remote endpoint is not known yet (for client use)
-    Tftpsender(boost::asio::ip::udp::socket &&INsocket,
-        std::shared_ptr<std::istream> inputstream, TftpMode INmode,
-        std::function<void(std::shared_ptr<Tftpsender>, boost::system::error_code)> INoperationDoneCallback = [](std::shared_ptr<Tftpsender>, boost::system::error_code){},
-        std::size_t INblocksize = DEFAULT_BLOCKSIZE);
+    Tftpsender(boost::asio::ip::udp::socket &&IN_socket,
+        std::shared_ptr<std::istream> IN_inputstream, TftpMode IN_mode,
+        int IN_firstAck,
+        std::function<void(std::shared_ptr<Tftpsender>, boost::system::error_code)> IN_operationDoneCallback = [](std::shared_ptr<Tftpsender>, boost::system::error_code){},
+        std::size_t IN_blocksize = DEFAULT_BLOCKSIZE);
 
 
     void start();

@@ -1,6 +1,7 @@
 #ifndef TFTPSERVER_H
 #define TFTPSERVER_H
 
+#include <optional>
 #include <string>
 #include <boost/asio.hpp>
 #include "tftpmessages.h"
@@ -21,10 +22,12 @@ private:
     void HandleSubRequest_RRQ(const RequestMessage &request);
     void HandleSubRequest_WRQ(const RequestMessage &request);
 
-    void sendErrorMsg(uint16_t errorcode, std::string msg);
+    void sendErrorMsg(TftpErrorCode errorcode, std::string msg);
 
     void removeSenderFromList(std::shared_ptr<Tftpsender> senderToRemove);
     void removeReceiverFromList(std::shared_ptr<TftpReceiver> receiverToRemove);
+
+    std::optional<TransactionOptionValues> parseOptionFields(const RequestMessage &request);
 
     boost::asio::io_context &mIoContext;
     boost::asio::strand<boost::asio::io_context::executor_type> mStrand;
@@ -40,6 +43,12 @@ private:
     std::vector<std::shared_ptr<TftpReceiver>> mReceiverList;
 
     bool stop = false;
+
+    static constexpr std::size_t NUM_SUPPORTED_OPTIONS = 1;
+    static const std::array<std::string, NUM_SUPPORTED_OPTIONS> supported_options;
+
 };
+
+const inline std::array<std::string, TftpServer::NUM_SUPPORTED_OPTIONS> TftpServer::supported_options = {"blksize"};
 
 #endif // TFTPSERVER_H

@@ -12,6 +12,8 @@
 //TODO: Change decoding to work on any container using iterators, instead of only strings
 bool RequestMessage::decode(const std::string &IN_requestStr)
 {
+    mOptionValues.clear();
+
     //Sanity check: needs at least space for opcode and two empty strings
     //Although the mode should not be able to be empty...
     if(IN_requestStr.size() < OPCODELENGTH + 2)
@@ -74,6 +76,11 @@ std::string RequestMessage::encode() const
     }
 
     int message_length = OPCODELENGTH + mFilename.size()+1 + modestr.size()+1 + optionValLength;
+    if(message_length > 512)
+    {
+        //See rfc 2347 for the 512 byte limitation in the request message
+        throw err_invalid_message_parameters("Message to encode is too large (> 512 bytes)");
+    }
     std::vector<unsigned char> IObuffer(message_length, 0);
 
     auto it = IObuffer.begin();
@@ -166,10 +173,6 @@ void RequestMessage::setOptVals(const std::map<std::string, std::string> &&IN_op
     mOptionValues = std::move(IN_optVals);
 }
 
-std::map<std::string, std::string>& RequestMessage::getOptVals()
-{
-    return mOptionValues;
-}
 const std::map<std::string, std::string>& RequestMessage::getOptVals() const
 {
     return mOptionValues;
@@ -343,4 +346,101 @@ void ErrorMessage::setErrorCode(error_code_t code)
 void ErrorMessage::setErrorMsg(const std::string &msg)
 {
     mErrorMessage = msg;
+}
+
+OptionACKMessage::OptionACKMessage()
+{
+    mOpCode = TftpOpcode::OACK;
+}
+
+void OptionACKMessage::setOptVals(const std::map<std::string, std::string> &IN_optVals)
+{
+    mOptionValues = IN_optVals;
+}
+
+void OptionACKMessage::setOptVals(const std::map<std::string, std::string> &&IN_optVals)
+{
+    mOptionValues = std::move(IN_optVals);
+}
+
+const std::map<std::string, std::string>& OptionACKMessage::getOptVals() const
+{
+    return mOptionValues;
+}
+
+bool OptionACKMessage::decode(const std::string &IN_optionACKStr)
+{
+    mOptionValues.clear();
+
+    //Sanity check: needs at least space for opcode and two empty strings
+    //Although the mode should not be able to be empty...
+    if(IN_optionACKStr.size() < OPCODELENGTH + 2)
+        return false;
+
+    //read opcode (2 bytes) from network:
+    uint16_t opcode = ntohs(*reinterpret_cast<const uint16_t*>((IN_optionACKStr.data())));
+    //If opcode is not representable by the valid codes
+    if(opcode != static_cast<uint16_t>(TftpOpcode::OACK))
+        return false;
+    mOpCode = static_cast<TftpOpcode> (opcode);
+
+    //start reading array of 0-terminated option-value pairs
+    std::size_t next_str_begin_idx = OPCODELENGTH + 1;
+    while(next_str_begin_idx < IN_optionACKStr.size())
+    {
+        std::string option = reinterpret_cast<const char*>(IN_optionACKStr.data() + next_str_begin_idx);
+        next_str_begin_idx += 2; //skip 0 termination
+
+        //Invalid option field: value is missing for this option
+        if(next_str_begin_idx >=  IN_optionACKStr.size())
+            return false;
+
+        std::string value = reinterpret_cast<const char*>(IN_optionACKStr.data() + next_str_begin_idx);
+        next_str_begin_idx += 2; //skip 0 termination
+        mOptionValues[option] = value;
+    }
+    //Everything could be parsed, good to go
+    return true;
+}
+
+std::string OptionACKMessage::encode() const
+{
+    //TODO: fill opcode 6, then fill value map with 0 termination
+    int optionValLength = 0;
+    for(auto &optVal : mOptionValues)
+    {
+        //the +1 are for the deliminating 0
+        optionValLength += optVal.first.size() + 1 + optVal.second.size() + 1;
+    }
+
+    int message_length = OPCODELENGTH + optionValLength;
+    if(message_length > 512)
+    {
+        //See rfc 2347 for the 512 byte limitation in the request message
+        throw err_invalid_message_parameters("Message to encode is too large (> 512 bytes)");
+    }
+    std::vector<unsigned char> IObuffer(message_length, 0);
+
+    auto it = IObuffer.begin();
+
+    //fill IObuffer with OACK in correct format per RFC:
+    //opcode(2 bytes)
+    *reinterpret_cast<uint16_t*>(&(*it)) = htons(static_cast<uint16_t>(mOpCode));
+    it += OPCODELENGTH;
+
+    //Option Value pairs (both pair partners as string, 0 terminated)
+    for(auto &optVal : mOptionValues)
+    {
+        it = std::copy(optVal.first.begin(), optVal.first.end(), it);
+        *it = 0;
+        ++it;
+
+        it = std::copy(optVal.second.begin(), optVal.second.end(), it);
+        *it = 0;
+        ++it;
+    }
+
+    assert(it == IObuffer.end());
+
+    return std::string(IObuffer.begin(), IObuffer.end());
 }

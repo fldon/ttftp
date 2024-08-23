@@ -18,3 +18,23 @@ std::string mode2str(TftpMode mode)
         return "invalid";
     }
 }
+
+/*!
+ * \brief TransactionOptionValues::getOptionsAsMap
+ * \return map in TFTP format that corresponds to the internal variables
+ */
+std::map<std::string, std::string> TransactionOptionValues::getOptionsAsMap() const
+{
+    std::map<std::string, std::string> ret_val;
+    ret_val["blksize"] = std::to_string(mBlocksize);
+
+    return ret_val;
+}
+
+void TransactionOptionValues::setOptionsFromMap(const std::map<std::string, std::string>& IN_map)
+{
+    if(IN_map.find("blksize") != IN_map.end())
+    {
+        mBlocksize = atoi(IN_map.at("blksize").c_str());
+    }
+}

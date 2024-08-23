@@ -25,7 +25,7 @@ class RequestMessage : public ITftpMessage
 {
 public:
     bool decode(const std::string &IN_requestStr) override;
-    std::string encode() const override;
+    [[nodiscard]] std::string encode() const override;
 
     [[nodiscard]] bool isRRQ() const;
     [[nodiscard]] bool isWRQ() const;
@@ -42,7 +42,6 @@ public:
 
     void setOptVals(const std::map<std::string, std::string> &IN_optVals);
     void setOptVals(const std::map<std::string, std::string> &&IN_optVals);
-    [[nodiscard]] std::map<std::string, std::string>& getOptVals();
     [[nodiscard]] const std::map<std::string, std::string>& getOptVals() const;
 
 private:
@@ -60,7 +59,7 @@ public:
     DataMessage(std::size_t IN_blocksize = DEFAULT_BLOCKSIZE);
 
     bool decode(const std::string &IN_dataStr) override;
-    std::string encode() const override;
+    [[nodiscard]] std::string encode() const override;
 
     [[nodiscard]] block_nr_t getBlockNr() const;
     void setBlockNr(block_nr_t IN_nr);
@@ -80,7 +79,7 @@ public:
     AckMessage();
 
     bool decode(const std::string &IN_ackStr) override;
-    std::string encode() const override;
+    [[nodiscard]] std::string encode() const override;
 
     [[nodiscard]] block_nr_t getBlockNr() const;
     void setBlockNr(block_nr_t IN_nr);
@@ -94,7 +93,7 @@ public:
     ErrorMessage();
 
     bool decode(const std::string &IN_errStr) override;
-    std::string encode() const override;
+    [[nodiscard]] std::string encode() const override;
 
     [[nodiscard]] error_code_t getErrorCode() const;
     void setErrorCode(error_code_t code);
@@ -104,6 +103,23 @@ public:
 private:
     error_code_t mErrorCode{0};
     std::string mErrorMessage;
+};
+
+//rfc 2347
+class OptionACKMessage : public ITftpMessage
+{
+public:
+    OptionACKMessage();
+
+    bool decode(const std::string &IN_optionACKStr) override;
+    [[nodiscard]] std::string encode() const override;
+
+    void setOptVals(const std::map<std::string, std::string> &IN_optVals);
+    void setOptVals(const std::map<std::string, std::string> &&IN_optVals);
+    [[nodiscard]] const std::map<std::string, std::string>& getOptVals() const;
+
+private:
+    std::map<std::string, std::string> mOptionValues;
 };
 
 struct err_invalid_message_parameters : public std::runtime_error
