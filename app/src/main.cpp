@@ -95,6 +95,7 @@ void run(int argc, char* argv[])
             client.start(serverAddress,
                          namedArgValues.at("--request=") == "write" ? TftpOpcode::WRQ : namedArgValues.at("--request=") == "read" ? TftpOpcode::RRQ : TftpOpcode::INVALID,
                          namedArgValues.at("--file="),
+                         TransactionOptionValues(),
                          TftpMode::OCTET,
                          [&operationDone, &error](TftpClient *finishedClient, boost::system::error_code err)
                          {

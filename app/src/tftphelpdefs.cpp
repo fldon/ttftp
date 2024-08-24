@@ -38,3 +38,15 @@ void TransactionOptionValues::setOptionsFromMap(const std::map<std::string, std:
         mBlocksize = atoi(IN_map.at("blksize").c_str());
     }
 }
+
+/*!
+ * \brief Checks if all option values are the default values
+ * \return
+ */
+bool TransactionOptionValues::isDefault() const
+{
+    bool isDefault = true;;
+    isDefault = isDefault && (mBlocksize == DEFAULT_BLOCKSIZE);
+
+    return isDefault;
+}

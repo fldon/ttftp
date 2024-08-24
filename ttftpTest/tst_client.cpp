@@ -440,7 +440,7 @@ TEST(TTFTPClient, CorrectCallbackOnFinish)
     std::future<std::size_t> my_future =
         testMockServerConnSocket.async_receive_from(boost::asio::buffer(buffer, buffer.size()), clientEndpoint, boost::asio::use_future);
 
-    client.start(boost::asio::ip::make_address("127.0.0.1"), TftpOpcode::WRQ, filename, TftpMode::OCTET, [&] (TftpClient*, boost::system::error_code ec)
+    client.start(boost::asio::ip::make_address("127.0.0.1"), TftpOpcode::WRQ, filename, TransactionOptionValues(), TftpMode::OCTET, [&] (TftpClient*, boost::system::error_code ec)
                  {
                      process_finished = true;
                      testIoContext.stop();

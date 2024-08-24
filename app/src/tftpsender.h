@@ -6,6 +6,8 @@
 #include <boost/asio.hpp>
 #include "tftphelpdefs.h"
 
+//TODO: instead of adding options like blocksize individually, use one TransactionOptionValues object
+
 /*
  * The end of an established tftp session that sends data (used for client and server)
  * */

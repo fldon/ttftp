@@ -7,6 +7,10 @@
 #include "tftphelpdefs.h"
 #include "tftpmessages.h"
 
+//TODO: add explicit option parameter for starting transfer by sending ACK 0 (server case and also client case when options are negotiated)
+
+//TODO: instead of adding options like blocksize individually, use one TransactionOptionValues member-object
+
 /*
  * The end of an established tftp session that receives data (used for client and server)
  * */

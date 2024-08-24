@@ -173,6 +173,11 @@ void RequestMessage::setOptVals(const std::map<std::string, std::string> &&IN_op
     mOptionValues = std::move(IN_optVals);
 }
 
+void RequestMessage::setOptVals(const TransactionOptionValues &IN_optVals)
+{
+    mOptionValues = IN_optVals.getOptionsAsMap();
+}
+
 const std::map<std::string, std::string>& RequestMessage::getOptVals() const
 {
     return mOptionValues;

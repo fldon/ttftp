@@ -18,11 +18,12 @@ public:
     TftpClient(const TftpClient &rhs) = delete;
     TftpClient(TftpClient &&rhs) = delete;
 
-    void start(boost::asio::ip::address server_address,
-        TftpOpcode requestType,
-        std::string filename,
-        TftpMode transfermode = TftpMode::OCTET,
-        std::function<void(TftpClient*, boost::system::error_code)> on_finish_callback = [](TftpClient*, boost::system::error_code){});
+    void start(boost::asio::ip::address IN_server_address,
+        TftpOpcode IN_requestType,
+        std::string IN_filename,
+        TransactionOptionValues IN_optionVals = TransactionOptionValues(),
+        TftpMode IN_transferMode = TftpMode::OCTET,
+        std::function<void(TftpClient*, boost::system::error_code)> IN_onFinishCallback = [](TftpClient*, boost::system::error_code){});
 
     [[nodiscard]] bool is_transfer_running() const;
 private:
@@ -37,6 +38,12 @@ private:
     bool mTransfer_running = false;
 
     std::function<void(TftpClient*, boost::system::error_code)> mTransferDoneCallback;
+
+    static constexpr std::size_t BUFSIZE = 2048;
+    std::array<uint8_t, BUFSIZE> mRecvBuffer;
+
+    //Used in case of OACK response from server
+    boost::asio::ip::udp::endpoint mServerEndpoint;
 };
 
 #endif // TFTPCLIENT_H
