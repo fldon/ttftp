@@ -45,6 +45,7 @@ void run(int argc, char* argv[])
     namedArgValues["--type="] = "";
     namedArgValues["--request="] = "";
     namedArgValues["--file="] = "";
+    namedArgValues["--blksize="] = "";
     boost::asio::ip::address serverAddress;
 
     //check all named args, IP must be last and will be checked separately
@@ -92,10 +93,23 @@ void run(int argc, char* argv[])
         TftpClient client(namedArgValues.at("--root=") , ctx);
         try
         {
+            TransactionOptionValues client_trans_values;
+            if(namedArgValues.at("--blksize=") != "")
+            {
+                //TODO: handle case where blksize= value is not numeric
+                int blksize = std::atoi(namedArgValues.at("--blksize=").c_str());
+                if(blksize < 8 || blksize > 65464)
+                {
+                    std::cout << "Invalid blocksize option supplied! Blocksize must be >=8 and <=65464.\n";
+                    print_usage_msg();
+                }
+                client_trans_values.mBlocksize = blksize;
+            }
+
             client.start(serverAddress,
                          namedArgValues.at("--request=") == "write" ? TftpOpcode::WRQ : namedArgValues.at("--request=") == "read" ? TftpOpcode::RRQ : TftpOpcode::INVALID,
                          namedArgValues.at("--file="),
-                         TransactionOptionValues(),
+                         client_trans_values,
                          TftpMode::OCTET,
                          [&operationDone, &error](TftpClient *finishedClient, boost::system::error_code err)
                          {
@@ -123,7 +137,7 @@ void run(int argc, char* argv[])
         }
         catch(std::runtime_error &e)
         {
-            std::cout << "An error occured while transferring the file. Aborting\n";
+            std::cout << "An error occured while transferring the file." << e.what() << "Aborting\n";
         }
     }
     else if(namedArgValues.at("--type=") == "server")

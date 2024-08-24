@@ -41,7 +41,7 @@ struct TransactionOptionValues
 
 
     [[nodiscard]] std::map<std::string, std::string> getOptionsAsMap() const;
-    void setOptionsFromMap(const std::map<std::string, std::string>& IN_map);
+    bool setOptionsFromMap(const std::map<std::string, std::string>& IN_map);
 
     [[nodiscard]] bool isDefault() const;
 };

@@ -32,6 +32,8 @@ TftpServer::TftpServer(std::string INrootfolder, boost::asio::io_context &ctx)
     rootfolder(INrootfolder)
 {
     buffer.fill(0);
+    boost::asio::socket_base::reuse_address option(true);
+    mAccSocket.set_option(option);
     mAccSocket.async_receive_from(boost::asio::buffer(buffer, BUFSIZE),
                                   currAccEndpoint,
                                   std::bind(&TftpServer::HandleRequest, this, boost::asio::placeholders::error, boost::asio::placeholders::bytes_transferred));
@@ -105,16 +107,18 @@ void TftpServer::HandleSubRequest_RRQ(const RequestMessage &request)
     //if optional is set: give it to sender
     //if wasSetByClient in transvals is set, expect ACK 0 and send OPTACK from new socket, otherwise ACK 1 and send nothing extra
     int expected_ack = 1;
+    int blocksize_to_use = DEFAULT_BLOCKSIZE;
     if(valuesFromClientRequest)
     {
         if(valuesFromClientRequest.value().wasSetByClient)
         {
             OptionACKMessage msg_opt_ack_response;
             msg_opt_ack_response.setOptVals(valuesFromClientRequest->getOptionsAsMap());
-            expected_ack = 0;
             //Then send an OPTACK (on new socket)
             std::string message_to_send = msg_opt_ack_response.encode();
             newsock.send_to(boost::asio::buffer(message_to_send, message_to_send.size()), currAccEndpoint);
+            expected_ack = 0;
+            blocksize_to_use = valuesFromClientRequest.value().mBlocksize;
         }
     }
     else
@@ -125,7 +129,7 @@ void TftpServer::HandleSubRequest_RRQ(const RequestMessage &request)
 
     std::shared_ptr<std::istream> ifs(new std::ifstream(filename_to_read, std::ios_base::binary));
 
-    std::shared_ptr<Tftpsender> sender = std::make_shared<Tftpsender>(std::move(newsock), ifs, str2mode(mode), remoteaddress, remoteport, expected_ack, std::bind(&TftpServer::removeSenderFromList, this, std::placeholders::_1), valuesFromClientRequest.value().mBlocksize);
+    std::shared_ptr<Tftpsender> sender = std::make_shared<Tftpsender>(std::move(newsock), ifs, str2mode(mode), remoteaddress, remoteport, expected_ack, std::bind(&TftpServer::removeSenderFromList, this, std::placeholders::_1), blocksize_to_use);
     mSenderList.push_back(sender);
     sender->start();
 }
@@ -153,6 +157,7 @@ void TftpServer::HandleSubRequest_WRQ(const RequestMessage &request)
     std::optional<TransactionOptionValues> valuesFromClientRequest = parseOptionFields(request);
     //if optional is not set: that means values were not valid: send error message over the socket
     //if optional is set: give it to sender
+    int blocksize_to_use = DEFAULT_BLOCKSIZE;
     if(valuesFromClientRequest)
     {
         if(valuesFromClientRequest.value().wasSetByClient)
@@ -162,17 +167,19 @@ void TftpServer::HandleSubRequest_WRQ(const RequestMessage &request)
             //Then send an OPTACK (on new socket)
             std::string message_to_send = msg_opt_ack_response.encode();
             newsock.send_to(boost::asio::buffer(message_to_send, message_to_send.size()), currAccEndpoint);
+            blocksize_to_use = valuesFromClientRequest.value().mBlocksize;
         }
     }
     else
     {
         //send error to peer over the new socket and terminate transaction
+        //TODO: somehow change the parseOptionFields fct. and etc. to return a concrete issue that we can send
         sendErrorMsg(TftpErrorCode::ERR_OPT_NEGOTIATION, "Option negotiation error: one of the option fields contained an invalid value");
     }
 
     std::shared_ptr<std::ostream> ofs(new std::ofstream(filename_to_write, std::ios_base::binary | std::ios_base::app));
 
-    std::shared_ptr<TftpReceiver> receiver = std::make_shared<TftpReceiver>(std::move(newsock), ofs, str2mode(mode), remoteaddress, remoteport, std::bind(&TftpServer::removeReceiverFromList, this, std::placeholders::_1) ,valuesFromClientRequest.value().mBlocksize);
+    std::shared_ptr<TftpReceiver> receiver = std::make_shared<TftpReceiver>(std::move(newsock), ofs, str2mode(mode), remoteaddress, remoteport, std::bind(&TftpServer::removeReceiverFromList, this, std::placeholders::_1), blocksize_to_use);
     mReceiverList.push_back(receiver);
     receiver->start();
 }
@@ -217,7 +224,18 @@ void TftpServer::removeSenderFromList(std::shared_ptr<Tftpsender> senderToRemove
 std::optional<TransactionOptionValues> TftpServer::parseOptionFields(const RequestMessage &request)
 {
     TransactionOptionValues ret_val;
+    if(request.getOptVals().empty())
+    {
+        ret_val.wasSetByClient = false;
+        return ret_val;
+    }
+    if(ret_val.setOptionsFromMap(request.getOptVals()))
+    {
+        ret_val.wasSetByClient = true;
+        return ret_val;
+    }
 
-    return ret_val;
+    //Some value was invalid
+    return {};
 }
 

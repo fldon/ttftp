@@ -30,14 +30,13 @@ void Tftpsender::start()
     else
     {
         //Server case: If remote connection is established, start by sending first block, subsequently expecting an ACK for block 1
-        if(isConnected)
+        if(lastsentdatacount == 1)
         {
             sendNextBlock();
         }
         //Client case: We need to establish the connection first
         else
         {
-            //lastsentdatacount = 0;
             startNextReceive();
         }
     }

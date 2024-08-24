@@ -78,19 +78,25 @@ void TftpClient::start(boost::asio::ip::address server_address, TftpOpcode reque
                                          if(received_msg.decode(std::string(mRecvBuffer.begin(), mRecvBuffer.begin() + receivedbytes)))
                                          {
                                              TransactionOptionValues received_options;
-                                             received_options.setOptionsFromMap(received_msg.getOptVals());
+                                             if(received_options.setOptionsFromMap(received_msg.getOptVals()))
+                                             {
 
-                                             //if I sent options and received OACK, I DO know the remote endpoint of the server!
-                                             // And I need to handle it differently, by first sending the ACK-0 as "ack" for the OACK
-                                             std::string filepath_to_write = mRootfolder + filename; //get full path
+                                                 //if I sent options and received OACK, I DO know the remote endpoint of the server!
+                                                 // And I need to handle it differently, by first sending the ACK-0 as "ack" for the OACK
+                                                 std::string filepath_to_write = mRootfolder + filename; //get full path
 
-                                             std::shared_ptr<std::ostream> ofs(new std::ofstream(filepath_to_write, std::ios_base::binary | std::ios_base::app));
+                                                 std::shared_ptr<std::ostream> ofs(new std::ofstream(filepath_to_write, std::ios_base::binary));
 
-                                             //Server expects ACK 0 packet instead of us waiting for data
-                                             std::shared_ptr<TftpReceiver> receiver = std::make_shared<TftpReceiver>(std::move(*sock), ofs, transfermode, mServerEndpoint.address(), mServerEndpoint.port(), std::bind(&TftpClient::on_receiver_done, this, std::placeholders::_1, std::placeholders::_2), received_options.mBlocksize);
-                                             mTransfer_running = true;
-                                             mTransferDoneCallback = on_finish_callback;
-                                             receiver->start();
+                                                 //Server expects ACK 0 packet instead of us waiting for data
+                                                 std::shared_ptr<TftpReceiver> receiver = std::make_shared<TftpReceiver>(std::move(*sock), ofs, transfermode, mServerEndpoint.address(), mServerEndpoint.port(), std::bind(&TftpClient::on_receiver_done, this, std::placeholders::_1, std::placeholders::_2), received_options.mBlocksize);
+                                                 mTransfer_running = true;
+                                                 mTransferDoneCallback = on_finish_callback;
+                                                 receiver->start();
+                                             }
+                                             else
+                                             {
+                                                 //TODO: send error about invalid option values
+                                             }
                                          }
                                      });
         }
@@ -100,7 +106,7 @@ void TftpClient::start(boost::asio::ip::address server_address, TftpOpcode reque
             //Receiver is constructed without knowing remote endpoint of server - it will receive the first block as acknowledgement, or time out
             std::string filepath_to_write = mRootfolder + filename; //get full path
 
-            std::shared_ptr<std::ostream> ofs(new std::ofstream(filepath_to_write, std::ios_base::binary | std::ios_base::app));
+            std::shared_ptr<std::ostream> ofs(new std::ofstream(filepath_to_write, std::ios_base::binary));
 
             std::shared_ptr<TftpReceiver> receiver = std::make_shared<TftpReceiver>(std::move(*sock), ofs, transfermode, std::bind(&TftpClient::on_receiver_done, this, std::placeholders::_1, std::placeholders::_2), DEFAULT_BLOCKSIZE);
             mTransfer_running = true;

@@ -42,14 +42,14 @@ bool RequestMessage::decode(const std::string &IN_requestStr)
     while(next_str_begin_idx < IN_requestStr.size())
     {
         std::string option = reinterpret_cast<const char*>(IN_requestStr.data() + next_str_begin_idx);
-        next_str_begin_idx += 2; //skip 0 termination
+        next_str_begin_idx += option.size() + 1; //skip 0 termination
 
         //Invalid option field: value is missing for this option
         if(next_str_begin_idx >=  IN_requestStr.size())
             return false;
 
         std::string value = reinterpret_cast<const char*>(IN_requestStr.data() + next_str_begin_idx);
-        next_str_begin_idx += 2; //skip 0 termination
+        next_str_begin_idx += value.size() + 1; //skip 0 termination
         mOptionValues[option] = value;
     }
     //Everything could be parsed, good to go
@@ -390,18 +390,18 @@ bool OptionACKMessage::decode(const std::string &IN_optionACKStr)
     mOpCode = static_cast<TftpOpcode> (opcode);
 
     //start reading array of 0-terminated option-value pairs
-    std::size_t next_str_begin_idx = OPCODELENGTH + 1;
+    std::size_t next_str_begin_idx = OPCODELENGTH;
     while(next_str_begin_idx < IN_optionACKStr.size())
     {
         std::string option = reinterpret_cast<const char*>(IN_optionACKStr.data() + next_str_begin_idx);
-        next_str_begin_idx += 2; //skip 0 termination
+        next_str_begin_idx += option.size() + 1; //skip 0 termination
 
         //Invalid option field: value is missing for this option
         if(next_str_begin_idx >=  IN_optionACKStr.size())
             return false;
 
         std::string value = reinterpret_cast<const char*>(IN_optionACKStr.data() + next_str_begin_idx);
-        next_str_begin_idx += 2; //skip 0 termination
+        next_str_begin_idx += value.size() + 1; //skip 0 termination
         mOptionValues[option] = value;
     }
     //Everything could be parsed, good to go

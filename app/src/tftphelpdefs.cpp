@@ -31,12 +31,22 @@ std::map<std::string, std::string> TransactionOptionValues::getOptionsAsMap() co
     return ret_val;
 }
 
-void TransactionOptionValues::setOptionsFromMap(const std::map<std::string, std::string>& IN_map)
+bool TransactionOptionValues::setOptionsFromMap(const std::map<std::string, std::string>& IN_map)
 {
     if(IN_map.find("blksize") != IN_map.end())
     {
-        mBlocksize = atoi(IN_map.at("blksize").c_str());
+        int blksize = atoi(IN_map.at("blksize").c_str());
+        if(blksize >= 8 && blksize <= 65464)
+            mBlocksize = blksize;
+        else
+        {
+            //TOOD: What to do with invalid values? Throw exception? Restore default values? Return a bool?
+            return false;
+        }
     }
+
+
+    return true;
 }
 
 /*!
