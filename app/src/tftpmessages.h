@@ -103,6 +103,8 @@ public:
 
     std::string getErrMsg() const;
     void setErrorMsg(const std::string &msg);
+
+    bool operator==(const ErrorMessage &rhs) const;
 private:
     error_code_t mErrorCode{0};
     std::string mErrorMessage;

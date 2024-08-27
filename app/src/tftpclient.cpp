@@ -95,7 +95,12 @@ void TftpClient::start(boost::asio::ip::address server_address, TftpOpcode reque
                                              }
                                              else
                                              {
-                                                 //TODO: send error about invalid option values
+                                                 //send error about invalid option values
+                                                 ErrorMessage response_msg;
+                                                 response_msg.setErrorMsg("OACK contained invalid option values");
+                                                 response_msg.setErrorCode(static_cast<error_code_t>(TftpErrorCode::ERR_OPT_NEGOTIATION));
+                                                 std::string error_msg_to_send = response_msg.encode();
+                                                 sock->send_to(boost::asio::buffer(error_msg_to_send, error_msg_to_send.size()), mServerEndpoint);
                                              }
                                          }
                                      });
@@ -144,20 +149,32 @@ void TftpClient::start(boost::asio::ip::address server_address, TftpOpcode reque
                                          if(received_msg.decode(std::string(mRecvBuffer.begin(), mRecvBuffer.begin() + receivedbytes)))
                                          {
                                              TransactionOptionValues received_options;
-                                             received_options.setOptionsFromMap(received_msg.getOptVals());
+                                             if( received_options.setOptionsFromMap(received_msg.getOptVals()) )
+                                             {
 
-                                             //if I sent options and received OACK, I DO know the remote endpoint of the server!
-                                             // And I need to handle it differently, by sending the first Data 1 packet, instead of waiting for ACK 0
-                                             std::string filepath_to_read = mRootfolder + filename; //get full path
+                                                 //if I sent options and received OACK, I DO know the remote endpoint of the server!
+                                                 // And I need to handle it differently, by sending the first Data 1 packet, instead of waiting for ACK 0
+                                                 std::string filepath_to_read = mRootfolder + filename; //get full path
 
-                                             std::shared_ptr<std::istream> ifs = std::make_shared<std::ifstream>(filepath_to_read, std::ios_base::binary);
+                                                 std::shared_ptr<std::istream> ifs = std::make_shared<std::ifstream>(filepath_to_read, std::ios_base::binary);
 
-                                             constexpr int ACK_TO_WAIT_FOR = 1;
-                                             std::shared_ptr<Tftpsender> sender = std::make_shared<Tftpsender>(std::move(*sock), ifs, transfermode, mServerEndpoint.address(), mServerEndpoint.port(), ACK_TO_WAIT_FOR, std::bind(&TftpClient::on_sender_done, this, std::placeholders::_1, std::placeholders::_2), received_options.mBlocksize);
-                                             mTransfer_running = true;
-                                             mTransferDoneCallback = on_finish_callback;
-                                             sender->start();
+                                                 constexpr int ACK_TO_WAIT_FOR = 1;
+                                                 std::shared_ptr<Tftpsender> sender = std::make_shared<Tftpsender>(std::move(*sock), ifs, transfermode, mServerEndpoint.address(), mServerEndpoint.port(), ACK_TO_WAIT_FOR, std::bind(&TftpClient::on_sender_done, this, std::placeholders::_1, std::placeholders::_2), received_options.mBlocksize);
+                                                 mTransfer_running = true;
+                                                 mTransferDoneCallback = on_finish_callback;
+                                                 sender->start();
+                                             }
+                                             else
+                                             {
+                                                 //send error about invalid option values
+                                                 ErrorMessage response_msg;
+                                                 response_msg.setErrorMsg("OACK contained invalid option values");
+                                                 response_msg.setErrorCode(static_cast<error_code_t>(TftpErrorCode::ERR_OPT_NEGOTIATION));
+                                                 std::string error_msg_to_send = response_msg.encode();
+                                                 sock->send_to(boost::asio::buffer(error_msg_to_send, error_msg_to_send.size()), mServerEndpoint);
+                                             }
                                          }
+
                                      });
         }
 

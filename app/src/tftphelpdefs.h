@@ -5,8 +5,7 @@
 #include <string>
 #include <map>
 
-enum class TftpOpcode {INVALID = 0, RRQ = 1, WRQ, DATA, ACK, ERROR, OACK};
-constexpr uint16_t LAST_VALID_OPCODE_NR = static_cast<uint16_t>(TftpOpcode::ERROR);
+enum class TftpOpcode : uint16_t {INVALID = 0, RRQ = 1, WRQ, DATA, ACK, ERROR, OACK};
 enum class TftpMode {INVALID, OCTET};
 
 [[nodiscard]] TftpMode str2mode(std::string mode);
@@ -35,7 +34,7 @@ constexpr uint16_t SERVER_LISTEN_PORT = 44500; //for debug: binding to port 69 d
 struct TransactionOptionValues
 {
     //Only for server use
-    bool wasSetByClient;
+    bool wasSetByClient{false};
 
     std::size_t mBlocksize{DEFAULT_BLOCKSIZE};
 

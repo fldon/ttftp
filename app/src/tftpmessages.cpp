@@ -353,6 +353,12 @@ void ErrorMessage::setErrorMsg(const std::string &msg)
     mErrorMessage = msg;
 }
 
+bool ErrorMessage::operator==(const ErrorMessage &rhs) const
+{
+    return rhs.mErrorMessage == mErrorMessage
+           && rhs.mErrorCode == mErrorCode;
+}
+
 OptionACKMessage::OptionACKMessage()
 {
     mOpCode = TftpOpcode::OACK;

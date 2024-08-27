@@ -201,3 +201,29 @@ TEST(TTFTPServer, ServerStartsWRQConn)
     t.join();
     EXPECT_EQ(timeout,  false);
 }
+
+//TODO: test if the server sends the correct error response if an RRQ for a non-existing file is sent from a (mock) client
+TEST(TTFTPServer, CorrectErrorWhenRRQForNonExistingFile)
+{
+    EXPECT_EQ(true, false);
+}
+
+//TODO: test if the server correctly responds to a valid blocksize option RRQ request
+//This means that the correct OACK is sent, and that the server expects an ACK 0 before sending Data 1
+TEST(TTFTPServer, CorrectBlksizeNegotiationRRQ)
+{
+    EXPECT_EQ(true, false);
+}
+
+//TODO: test if the server correctly responds to a valid blocksize option WRQ request
+//This means that the correct OACK is sent, and that the server expects Data 1 to be send without sending an ACK 0 first
+TEST(TTFTPServer, CorrectBlksizeNegotiationWRQ)
+{
+    EXPECT_EQ(true, false);
+}
+
+//TODO: test if the server sends a correct error response if the blksize option value is invalid (too small, too large, or not integer)
+TEST(TTFTPServer, CorrectErrorOnInvalidblksize)
+{
+    EXPECT_EQ(true, false);
+}
