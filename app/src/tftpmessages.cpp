@@ -246,6 +246,14 @@ block_nr_t DataMessage::getBlockNr() const
     return mBlockNr;
 }
 
+bool DataMessage::operator==(const DataMessage &rhs) const
+{
+    return rhs.mOpCode == mOpCode
+           && rhs.mBlockNr == mBlockNr
+           && rhs.mBlocksize == mBlocksize
+           && rhs.mData == mData;
+}
+
 AckMessage::AckMessage()
     :mBlockNr(0)
 {
@@ -294,6 +302,12 @@ block_nr_t AckMessage::getBlockNr() const
 void AckMessage::setBlockNr(block_nr_t IN_nr)
 {
     mBlockNr = IN_nr;
+}
+
+bool AckMessage::operator==(const AckMessage& rhs) const
+{
+    return rhs.mBlockNr == mBlockNr
+           && rhs.mOpCode == mOpCode;
 }
 
 ErrorMessage::ErrorMessage()

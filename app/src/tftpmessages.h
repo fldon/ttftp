@@ -70,6 +70,8 @@ public:
     //Copies databuf into data, using move operations if possible
     template<typename T>
     bool setData(T&& databuf);
+
+    bool operator==(const DataMessage &rhs) const;
 private:
     std::vector<unsigned char> mData;
     block_nr_t mBlockNr{0};
@@ -86,6 +88,8 @@ public:
 
     [[nodiscard]] block_nr_t getBlockNr() const;
     void setBlockNr(block_nr_t IN_nr);
+
+    bool operator==(const AckMessage& rhs) const;
 private:
     block_nr_t mBlockNr{0};
 };
