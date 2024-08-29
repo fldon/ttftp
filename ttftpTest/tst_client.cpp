@@ -4,6 +4,7 @@
 #include "tftpclient.h"
 #include <cstdio>
 #include <fstream>
+#include <thread>
 
 using namespace testing;
 using namespace std::chrono_literals;
@@ -611,20 +612,8 @@ TEST(TTFTPClient, CorrectErrorOnInvalidOACK_WRQ_blksize)
     std::string filename = "RRQWriteTestFile.txt";
     std::string mode = "octet";
 
-    *reinterpret_cast<uint16_t*>(RRQmsg.data()) = htons(opcode);
-    for(auto it = filename.begin(); it != filename.end(); ++it)
-    {
-        RRQmsg.push_back(*it);
-    }
-    RRQmsg.push_back(0);
 
-    for(auto it = mode.begin(); it != mode.end(); ++it)
-    {
-        RRQmsg.push_back(*it);
-    }
-    RRQmsg.push_back(0);
-
-    //The above RRQMsg should be received from the client when it is created with the octed mode and the filename
+    //TODO: delete testfile first if it exists, then create it anew
 
 
     boost::asio::io_context testIoContext;
@@ -705,42 +694,455 @@ TEST(TTFTPClient, CorrectErrorOnInvalidOACK_WRQ_blksize)
     t.join();
 }
 
-//TODO: test if the client correctly sends and responds to the OACK of a blksize option negotiation RRQ
+//test if the client correctly sends and responds to the OACK of a blksize option negotiation RRQ
 TEST(TTFTPClient, CorrectBlksizeNegotiationRRQ)
 {
-    EXPECT_EQ(true, false);
+    //Create client with RRQ and blksize option set to a valid value
 
-    //TODO: Create client with RRQ and blksize option set to a valid value
-    //TODO: receive RRQ with mock server and send valid OACK
-    //TODO: check if client sends first block correct (ACK 0) and if complete test file is then transferred completely correctly
+    //fill initial read request message: opcode, filename-string, 0 byte, mode-string, 0 byte
+    //mode-string is for now "octet", nothing else is supported
+    std::vector<char> RRQmsg(sizeof(uint16_t));
+    uint16_t opcode = static_cast<uint16_t>(TftpOpcode::RRQ);
+
+
+
+    std::string filename = "RRQWriteTestFile.txt";
+    std::string mode = "octet";
+
+    *reinterpret_cast<uint16_t*>(RRQmsg.data()) = htons(opcode);
+    for(auto it = filename.begin(); it != filename.end(); ++it)
+    {
+        RRQmsg.push_back(*it);
+    }
+    RRQmsg.push_back(0);
+
+    for(auto it = mode.begin(); it != mode.end(); ++it)
+    {
+        RRQmsg.push_back(*it);
+    }
+    RRQmsg.push_back(0);
+
+    //The above RRQMsg should be received from the client when it is created with the octed mode and the filename
+
+
+    boost::asio::io_context testIoContext;
+    uint16_t testport = SERVER_LISTEN_PORT; //local port
+    boost::asio::ip::udp::endpoint testMockServerEndpoint(boost::asio::ip::udp::v4(), testport); //Local endpoint for mock server
+    boost::asio::ip::udp::socket testMockServerConnSocket(testIoContext, testMockServerEndpoint);
+
+
+    boost::asio::ip::udp::endpoint clientEndpoint; //endpoint from client after request is received
+
+
+    TftpClient client("", testIoContext);
+
+    bool timeout = false;
+
+    std::array<char, 512> buffer;
+    buffer.fill(0);
+
+
+    //receive RRQ with mock server and send valid OACK
+    timeout = false;
+    std::future<std::size_t> my_future =
+        testMockServerConnSocket.async_receive_from(boost::asio::buffer(buffer, buffer.size()), clientEndpoint, boost::asio::use_future);
+
+
+    //Remove test file if it already exists
+    std::remove(filename.c_str());
+
+    TransactionOptionValues values_for_client;
+    values_for_client.mBlocksize = 1024; //just any non-default, valid value here
+
+    //Send RRQ, expect OACK from this point
+    client.start(boost::asio::ip::make_address("127.0.0.1"), TftpOpcode::RRQ, filename, values_for_client);
+
+    std::thread t([&testIoContext] () {testIoContext.run();});
+    auto futurestatus = my_future.wait_for(15s);
+    if(futurestatus == std::future_status::timeout)
+    {
+        timeout = true;
+    }
+    else
+    {
+        //Create valid OACK response (do not send yet)
+        RequestMessage received_msg;
+        EXPECT_TRUE( received_msg.decode(std::string(buffer.begin(), buffer.begin() + my_future.get())) );
+
+        TransactionOptionValues values_to_OACK;
+        EXPECT_TRUE(values_to_OACK.setOptionsFromMap(received_msg.getOptVals()));
+        OptionACKMessage oack_response_msg;
+        oack_response_msg.setOptVals(values_to_OACK.getOptionsAsMap());
+
+        //Receive next message after OACK, should be ACK 0
+        buffer.fill(0);
+        std::future<std::size_t> my_future =
+            testMockServerConnSocket.async_receive_from(boost::asio::buffer(buffer, buffer.size()), clientEndpoint, boost::asio::use_future);
+
+        //respond with an valid OACK value response
+        {
+            std::string oack_string_to_send = oack_response_msg.encode();
+            testMockServerConnSocket.send_to(boost::asio::buffer(oack_string_to_send, oack_string_to_send.size()), clientEndpoint);
+        }
+
+        auto futurestatus = my_future.wait_for(15s);
+        if(futurestatus == std::future_status::timeout)
+        {
+            timeout = true;
+        }
+        else
+        {
+            //check if client sends first block correct (ACK 0)
+            AckMessage expected_ack_msg;
+            expected_ack_msg.setBlockNr(0);
+
+            AckMessage received_ack_msg;
+            EXPECT_TRUE( received_ack_msg.decode( std::string(buffer.begin(), buffer.begin() + my_future.get()) ) );
+            EXPECT_EQ(expected_ack_msg, received_ack_msg);
+        }
+    }
+    EXPECT_EQ(timeout, false);
+    testIoContext.stop();
+    t.join();
 }
 
 //TODO: test if the client correctly sends and responds to the OACK of a blksize option negotiation WRQ
 TEST(TTFTPClient, CorrectBlksizeNegotiationWRQ)
 {
-    EXPECT_EQ(true, false);
+    //Create client with WRQ and blksize option set to a valid value
 
-    //TODO: Create client with WRQ and blksize option set to a valid value
-    //TODO: receive RRQ with mock server and send valid OACK
-    //TODO: check if client sends first block correct (Data 1) and if complete test file is then transferred completely correctly
+    //fill initial read request message: opcode, filename-string, 0 byte, mode-string, 0 byte
+    //mode-string is for now "octet", nothing else is supported
+    std::vector<char> RRQmsg(sizeof(uint16_t));
+    uint16_t opcode = static_cast<uint16_t>(TftpOpcode::RRQ);
+
+
+    //delete testfile first if it exists, then create it anew
+    std::string filename = "WRQWriteTestFile.txt";
+    std::string mode = "octet";
+
+    //Remove test file if it already exists
+    std::remove(filename.c_str());
+
+    //fill testfile
+    constexpr int NUM_OF_BLOCKS = 4;
+    std::vector<char> ofsinput;
+    for(uint16_t i = 1; i <= 512 * NUM_OF_BLOCKS; ++i)
+    {
+        ofsinput.push_back(rand());
+    }
+
+    {
+        std::ofstream ofs(filename, std::ios_base::binary | std::ios_base::out);
+        EXPECT_TRUE(ofs.seekp(0));
+        ofs.write(ofsinput.data(), ofsinput.size());
+    }
+
+
+
+    boost::asio::io_context testIoContext;
+    uint16_t testport = SERVER_LISTEN_PORT; //local port
+    boost::asio::ip::udp::endpoint testMockServerEndpoint(boost::asio::ip::udp::v4(), testport); //Local endpoint for mock server
+    boost::asio::ip::udp::socket testMockServerConnSocket(testIoContext, testMockServerEndpoint);
+
+
+    boost::asio::ip::udp::endpoint clientEndpoint; //endpoint from client after request is received
+
+
+    TftpClient client("", testIoContext);
+
+    bool timeout = false;
+
+    std::array<char, 2048> buffer;
+    buffer.fill(0);
+
+
+    //receive WRQ with mock server and send valid OACK
+    timeout = false;
+    std::future<std::size_t> my_future =
+        testMockServerConnSocket.async_receive_from(boost::asio::buffer(buffer, buffer.size()), clientEndpoint, boost::asio::use_future);
+
+    TransactionOptionValues values_for_client;
+    values_for_client.mBlocksize = 1024; //just any non-default, valid value here
+
+    //Send RRQ, expect OACK from this point
+    client.start(boost::asio::ip::make_address("127.0.0.1"), TftpOpcode::WRQ, filename, values_for_client);
+
+    std::thread t([&testIoContext] () {testIoContext.run();});
+    auto futurestatus = my_future.wait_for(15s);
+    if(futurestatus == std::future_status::timeout)
+    {
+        timeout = true;
+    }
+    else
+    {
+        //Create valid OACK response (do not send yet)
+        RequestMessage received_msg;
+        EXPECT_TRUE( received_msg.decode(std::string(buffer.begin(), buffer.begin() + my_future.get())) );
+
+        TransactionOptionValues values_to_OACK;
+        EXPECT_TRUE(values_to_OACK.setOptionsFromMap(received_msg.getOptVals()));
+        OptionACKMessage oack_response_msg;
+        oack_response_msg.setOptVals(values_to_OACK.getOptionsAsMap());
+
+        //Receive next message after OACK, should be Data 1
+        buffer.fill(0);
+        std::future<std::size_t> my_future =
+            testMockServerConnSocket.async_receive_from(boost::asio::buffer(buffer, buffer.size()), clientEndpoint, boost::asio::use_future);
+
+        //respond with an valid OACK value response
+        {
+            std::string oack_string_to_send = oack_response_msg.encode();
+            testMockServerConnSocket.send_to(boost::asio::buffer(oack_string_to_send, oack_string_to_send.size()), clientEndpoint);
+        }
+
+        auto futurestatus = my_future.wait_for(15s);
+        if(futurestatus == std::future_status::timeout)
+        {
+            timeout = true;
+        }
+        else
+        {
+            //check if client sends first block correct (ACK 0)
+            DataMessage expected_msg(1024);
+            expected_msg.setBlockNr(1);
+            // also check if contents of first block are correct
+            expected_msg.setData( std::string(ofsinput.begin(), ofsinput.begin() + 1024) );
+
+
+            DataMessage received_data_msg(1024);
+            EXPECT_TRUE( received_data_msg.decode( std::string(buffer.begin(), buffer.begin() + my_future.get()) ) );
+            EXPECT_EQ(expected_msg, received_data_msg);
+        }
+    }
+    EXPECT_FALSE(timeout);
+    testIoContext.stop();
+    t.join();
 }
 
-//TODO: test if the client times out and keeps going with default values when waiting for OACK for an RRQ
-TEST(TTFTPClient, TimeoutWhileWaitingForOACK_RRQ)
+//test if the client keeps going with default values when its option Request is ignored by the mock server with RRQ
+TEST(TTFTPClient, CLientRevertToDefaultWhenNoOACK_RRQ)
 {
-    EXPECT_EQ(true, false);
+    //Create client with RRQ and blksize option set to a valid value
 
-    //TODO: Create client with RRQ and blksize option set to a valid value
-    //TODO: Receive RRQ and answer as if no blocksize option is included: just send data 1 from mock server
-    //TODO: Check if the whole file is then transferred correctly using the default blocksize (client must chose default settings after timeout for OACK)
+    //fill initial read request message: opcode, filename-string, 0 byte, mode-string, 0 byte
+    //mode-string is for now "octet", nothing else is supported
+    std::vector<char> RRQmsg(sizeof(uint16_t));
+    uint16_t opcode = static_cast<uint16_t>(TftpOpcode::RRQ);
+
+
+
+    std::string filename = "RRQWriteTestFile.txt";
+    std::string mode = "octet";
+
+
+    boost::asio::io_context testIoContext;
+    uint16_t testport = SERVER_LISTEN_PORT; //local port
+    boost::asio::ip::udp::endpoint testMockServerEndpoint(boost::asio::ip::udp::v4(), testport); //Local endpoint for mock server
+    boost::asio::ip::udp::socket testMockServerConnSocket(testIoContext, testMockServerEndpoint);
+
+
+    boost::asio::ip::udp::endpoint clientEndpoint; //endpoint from client after request is received
+
+
+    TftpClient client("", testIoContext);
+
+    bool timeout = false;
+
+    std::array<char, 2048> buffer;
+    buffer.fill(0);
+
+
+    //Receive RRQ
+    timeout = false;
+    std::future<std::size_t> my_future =
+        testMockServerConnSocket.async_receive_from(boost::asio::buffer(buffer, buffer.size()), clientEndpoint, boost::asio::use_future);
+
+
+    //Remove test file if it already exists
+    std::remove(filename.c_str());
+
+    TransactionOptionValues values_for_client;
+    values_for_client.mBlocksize = 1024; //just any non-default, valid value here
+
+    //Send RRQ, expect OACK from this point
+    client.start(boost::asio::ip::make_address("127.0.0.1"), TftpOpcode::RRQ, filename, values_for_client);
+
+    std::thread t([&testIoContext] () {testIoContext.run();});
+    auto futurestatus = my_future.wait_for(15s);
+    if(futurestatus == std::future_status::timeout)
+    {
+        timeout = true;
+    }
+    {
+        RequestMessage received_msg;
+        EXPECT_TRUE( received_msg.decode(std::string(buffer.begin(), buffer.begin() + my_future.get())) );
+
+
+        buffer.fill(0);
+        //Create valid response ignoring the options: just send data 1 and expect ACK 1 immediately
+        DataMessage data_msg_to_send;
+        //Just fill data with zeroes
+        data_msg_to_send.setData(std::string(buffer.begin(), buffer.begin() + 512));
+        data_msg_to_send.setBlockNr(1);
+
+        //Receive response to Data 1, should be ACK 1
+        buffer.fill(0);
+        std::future<std::size_t> my_future =
+            testMockServerConnSocket.async_receive_from(boost::asio::buffer(buffer, buffer.size()), clientEndpoint, boost::asio::use_future);
+
+        //send the data 1 block
+        {
+            std::string data_string_to_send = data_msg_to_send.encode();
+            testMockServerConnSocket.send_to(boost::asio::buffer(data_string_to_send, data_string_to_send.size()), clientEndpoint);
+        }
+
+        //TODO: this is VERY ugly. We wait because the client throws the first data away and counts on it being re-sent
+        //Instead, the client should directly use the data 1 block it receives, but for that I have to change the interface/ctor
+        std::this_thread::sleep_for(5s);
+        //send the data 1 block again (because client throws the first one away)
+        {
+            std::string data_string_to_send = data_msg_to_send.encode();
+            testMockServerConnSocket.send_to(boost::asio::buffer(data_string_to_send, data_string_to_send.size()), clientEndpoint);
+        }
+
+        auto futurestatus = my_future.wait_for(15s);
+        if(futurestatus == std::future_status::timeout)
+        {
+            timeout = true;
+        }
+        else
+        {
+            //check if client sends first ack correct (ACK 1)
+            AckMessage expected_ack_msg;
+            expected_ack_msg.setBlockNr(1);
+
+            AckMessage received_ack_msg;
+            EXPECT_TRUE(received_ack_msg.decode( std::string(buffer.begin(), buffer.begin() + my_future.get())) );
+            EXPECT_EQ(expected_ack_msg, received_ack_msg);
+        }
+    }
+    EXPECT_FALSE(timeout);
+    testIoContext.stop();
+    t.join();
 }
 
-//TODO: test if the client times out and keeps going with default values when waiting for OACK for an WRQ
-TEST(TTFTPClient, TimeoutWhileWaitingForOACK_WRQ)
+//test if the client keeps going with default values when its option Request is ignored by the mock server with WRQ
+TEST(TTFTPClient, CLientRevertToDefaultWhenNoOACK_WRQ)
 {
-    EXPECT_EQ(true, false);
+    //Create client with RRQ and blksize option set to a valid value
 
-    //TODO: Create client with RRQ and blksize option set to a valid value
-    //TODO: Receive RRQ and answer as if no blocksize option is included: just send ACK 0 from mock server
-    //TODO: Check if the whole file is then transferred correctly using the default blocksize (client must chose default settings after timeout for OACK)
+    //fill initial read request message: opcode, filename-string, 0 byte, mode-string, 0 byte
+    //mode-string is for now "octet", nothing else is supported
+    std::vector<char> RRQmsg(sizeof(uint16_t));
+    uint16_t opcode = static_cast<uint16_t>(TftpOpcode::RRQ);
+
+
+
+    std::string filename = "RRQWriteTestFile.txt";
+    std::string mode = "octet";
+
+    //Remove test file if it already exists
+    std::remove(filename.c_str());
+
+    //fill testfile
+    constexpr int NUM_OF_BLOCKS = 4;
+    std::vector<char> ofsinput;
+    for(uint16_t i = 1; i <= 512 * NUM_OF_BLOCKS; ++i)
+    {
+        ofsinput.push_back(rand());
+    }
+
+    {
+        std::ofstream ofs(filename, std::ios_base::binary | std::ios_base::out);
+        EXPECT_TRUE(ofs.seekp(0));
+        ofs.write(ofsinput.data(), ofsinput.size());
+    }
+
+
+    boost::asio::io_context testIoContext;
+    uint16_t testport = SERVER_LISTEN_PORT; //local port
+    boost::asio::ip::udp::endpoint testMockServerEndpoint(boost::asio::ip::udp::v4(), testport); //Local endpoint for mock server
+    boost::asio::ip::udp::socket testMockServerConnSocket(testIoContext, testMockServerEndpoint);
+
+
+    boost::asio::ip::udp::endpoint clientEndpoint; //endpoint from client after request is received
+
+
+    TftpClient client("", testIoContext);
+
+    bool timeout = false;
+
+    std::array<char, 2048> buffer;
+    buffer.fill(0);
+
+
+    //Receive RRQ
+    timeout = false;
+    std::future<std::size_t> my_future =
+        testMockServerConnSocket.async_receive_from(boost::asio::buffer(buffer, buffer.size()), clientEndpoint, boost::asio::use_future);
+
+
+    TransactionOptionValues values_for_client;
+    values_for_client.mBlocksize = 1024; //just any non-default, valid value here
+
+    //Send RRQ, expect OACK from this point
+    client.start(boost::asio::ip::make_address("127.0.0.1"), TftpOpcode::WRQ, filename, values_for_client);
+
+    std::thread t([&testIoContext] () {testIoContext.run();});
+    auto futurestatus = my_future.wait_for(15s);
+    if(futurestatus == std::future_status::timeout)
+    {
+        timeout = true;
+    }
+    {
+        RequestMessage received_msg;
+        EXPECT_TRUE( received_msg.decode(std::string(buffer.begin(), buffer.begin() + my_future.get())) );
+
+
+        buffer.fill(0);
+        //Create valid response ignoring the options: just send ACK 0 and expect data 1
+        AckMessage ack_msg_to_send;
+        ack_msg_to_send.setBlockNr(0);
+
+        //Receive response to ACK 0, should be Data 1
+        buffer.fill(0);
+        std::future<std::size_t> my_future =
+            testMockServerConnSocket.async_receive_from(boost::asio::buffer(buffer, buffer.size()), clientEndpoint, boost::asio::use_future);
+
+        //send the ACK 0 block
+        {
+            std::string ack_string_to_send = ack_msg_to_send.encode();
+            testMockServerConnSocket.send_to(boost::asio::buffer(ack_string_to_send, ack_string_to_send.size()), clientEndpoint);
+        }
+
+        //TODO: this is VERY ugly. We wait because the client throws the first data away and counts on it being re-sent
+        //Instead, the client should directly use the data 1 block it receives, but for that I have to change the interface/ctor
+        std::this_thread::sleep_for(5s);
+        //send the ACK 0 block again (because client throws the first one away)
+        {
+            std::string ack_string_to_send = ack_msg_to_send.encode();
+            testMockServerConnSocket.send_to(boost::asio::buffer(ack_string_to_send, ack_string_to_send.size()), clientEndpoint);
+        }
+
+        auto futurestatus = my_future.wait_for(15s);
+        if(futurestatus == std::future_status::timeout)
+        {
+            timeout = true;
+        }
+        else
+        {
+            //check if client sends first data correct (data 1)
+            DataMessage expected_data_msg;
+            expected_data_msg.setBlockNr(1);
+            expected_data_msg.setData( std::string(ofsinput.data(), ofsinput.data() + DEFAULT_BLOCKSIZE) );
+
+            DataMessage received_data_msg;
+            EXPECT_TRUE(received_data_msg.decode( std::string(buffer.begin(), buffer.begin() + my_future.get())) );
+            EXPECT_EQ(expected_data_msg, received_data_msg);
+        }
+    }
+    EXPECT_FALSE(timeout);
+    testIoContext.stop();
+    t.join();
 }
