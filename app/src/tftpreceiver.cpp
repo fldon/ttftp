@@ -181,20 +181,27 @@ void TftpReceiver::sendNextAck(bool lastAck)
     std::shared_ptr<std::string> string_to_send = std::make_shared<std::string>(lastsentack.encode());
 
     auto self = shared_from_this();
-    if(!lastAck)
+    if(isConnected) //No point in sending an ACK into the void
     {
-        remoteConnSocket.async_send_to(boost::asio::buffer(*string_to_send, string_to_send->size()), mSenderEndpoint,
-                                       [self, string_to_send] (boost::system::error_code err, std::size_t sentbytes)
-                                       {
-                                           self->handleACKsent(err, sentbytes);
-                                       });
+        if(!lastAck)
+        {
+            remoteConnSocket.async_send_to(boost::asio::buffer(*string_to_send, string_to_send->size()), mSenderEndpoint,
+                                           [self, string_to_send] (boost::system::error_code err, std::size_t sentbytes)
+                                           {
+                                               self->handleACKsent(err, sentbytes);
+                                           });
+        }
+        else
+        {
+            //TODO: maybe linger for some time, in order to re-send ACK if it has not arrived at remote host
+            remoteConnSocket.send_to(boost::asio::buffer(*string_to_send, string_to_send->size()), mSenderEndpoint);
+            endOperation();
+        }
     }
+    //If there was no message yet by the server, simply try to receive the first block again
     else
     {
-        //TODO: maybe linger for some time, in order to re-send ACK if it has not arrived at remote host
-        //TODO: also, do not send this synchronously here. Theoretically it could still block
-        remoteConnSocket.send_to(boost::asio::buffer(*string_to_send, string_to_send->size()), mSenderEndpoint);
-        endOperation();
+        startNextReceive();
     }
 }
 
@@ -216,13 +223,20 @@ void TftpReceiver::startNextReceive()
 
 void TftpReceiver::handleFirstBlockWithoutConnect(boost::system::error_code err, std::size_t sentbytes)
 {
+    readTimeoutTimer.cancel();
     if(!err)
     {
         checkReceivedBlock(err, sentbytes);
     }
+    //Read operation momentarily cancelled by timer
+    else if(err == boost::asio::error::operation_aborted)
+    {
+        sendNextAck();
+    }
     else
     {
-        throw std::runtime_error("Error while connecting to server: " + err.what());
+        //throw std::runtime_error("Error while connecting to server: " + err.what());
+        endOperation(err);
     }
 }
 

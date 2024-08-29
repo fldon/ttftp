@@ -70,15 +70,15 @@ void TftpClient::start(boost::asio::ip::address server_address, TftpOpcode reque
         //wait for OACK: then enable the ACKed options with the ACKed values
         if(!IN_optionVals.isDefault())
         {
-            //TODO: include timeout behavior
-            //TODO: handle invalid OACK values: answer with error and stop
+            //TODO: include timeout behavior if no answer arrives at all
             sock->async_receive_from(boost::asio::buffer(mRecvBuffer, mRecvBuffer.size()), mServerEndpoint, [=] (boost::system::error_code err, std::size_t receivedbytes)
                                      {
-                                         OptionACKMessage received_msg;
-                                         if(received_msg.decode(std::string(mRecvBuffer.begin(), mRecvBuffer.begin() + receivedbytes)))
+                                         OptionACKMessage received_oack_msg;
+                                         DataMessage received_data_msg;
+                                         if(received_oack_msg.decode(std::string(mRecvBuffer.begin(), mRecvBuffer.begin() + receivedbytes)))
                                          {
                                              TransactionOptionValues received_options;
-                                             if(received_options.setOptionsFromMap(received_msg.getOptVals()))
+                                             if(received_options.setOptionsFromMap(received_oack_msg.getOptVals()))
                                              {
 
                                                  //if I sent options and received OACK, I DO know the remote endpoint of the server!
@@ -101,7 +101,33 @@ void TftpClient::start(boost::asio::ip::address server_address, TftpOpcode reque
                                                  response_msg.setErrorCode(static_cast<error_code_t>(TftpErrorCode::ERR_OPT_NEGOTIATION));
                                                  std::string error_msg_to_send = response_msg.encode();
                                                  sock->send_to(boost::asio::buffer(error_msg_to_send, error_msg_to_send.size()), mServerEndpoint);
+
+                                                 //TODO: give error code to client caller using callback
                                              }
+                                         }
+                                         //We received a data msg instead
+                                         else if(received_data_msg.decode(std::string(mRecvBuffer.begin(), mRecvBuffer.begin() + receivedbytes)))
+                                         {
+                                             {
+                                                 //Create normal receiver, with default parameters
+                                                 //We ignore this data msg and expect it to be re-sent by the peer, for simplicitly
+
+                                                 //Receiver is constructed without knowing remote endpoint of server - it will receive the first block as acknowledgement, or time out
+                                                 std::string filepath_to_write = mRootfolder + filename; //get full path
+
+                                                 std::shared_ptr<std::ostream> ofs(new std::ofstream(filepath_to_write, std::ios_base::binary));
+
+                                                 std::shared_ptr<TftpReceiver> receiver = std::make_shared<TftpReceiver>(std::move(*sock), ofs, transfermode, std::bind(&TftpClient::on_receiver_done, this, std::placeholders::_1, std::placeholders::_2), DEFAULT_BLOCKSIZE);
+                                                 mTransfer_running = true;
+                                                 mTransferDoneCallback = on_finish_callback;
+                                                 receiver->start();
+                                             }
+                                         }
+                                         else
+                                         {
+                                             //TODO: send error to peer (neither OACk nor data, so incorrect response)
+
+                                             //TODO: give error code to client caller using callback
                                          }
                                      });
         }
@@ -145,11 +171,12 @@ void TftpClient::start(boost::asio::ip::address server_address, TftpOpcode reque
             //TODO: handle invalid OACK values: answer with error and stop
             sock->async_receive_from(boost::asio::buffer(mRecvBuffer, mRecvBuffer.size()), mServerEndpoint, [=] (boost::system::error_code err, std::size_t receivedbytes)
                                      {
-                                         OptionACKMessage received_msg;
-                                         if(received_msg.decode(std::string(mRecvBuffer.begin(), mRecvBuffer.begin() + receivedbytes)))
+                                         OptionACKMessage received_oack_msg;
+                                         AckMessage received_ack_msg;
+                                         if(received_oack_msg.decode(std::string(mRecvBuffer.begin(), mRecvBuffer.begin() + receivedbytes)))
                                          {
                                              TransactionOptionValues received_options;
-                                             if( received_options.setOptionsFromMap(received_msg.getOptVals()) )
+                                             if( received_options.setOptionsFromMap(received_oack_msg.getOptVals()) )
                                              {
 
                                                  //if I sent options and received OACK, I DO know the remote endpoint of the server!
@@ -172,7 +199,34 @@ void TftpClient::start(boost::asio::ip::address server_address, TftpOpcode reque
                                                  response_msg.setErrorCode(static_cast<error_code_t>(TftpErrorCode::ERR_OPT_NEGOTIATION));
                                                  std::string error_msg_to_send = response_msg.encode();
                                                  sock->send_to(boost::asio::buffer(error_msg_to_send, error_msg_to_send.size()), mServerEndpoint);
+
+                                                 //TODO: give error code to client caller using callback
                                              }
+                                         }
+                                         //We received an ack msg instead
+                                         else if(received_ack_msg.decode(std::string(mRecvBuffer.begin(), mRecvBuffer.begin() + receivedbytes)))
+                                         {
+                                             {
+                                                 //Create normal sender, with default parameters
+                                                 //We ignore this ack msg and expect it to be re-sent by the peer, for simplicitly
+
+                                                 //Sender is constructed without knowing remote endpoint of server - it will receive the first ACK for block 0, or time out
+                                                 std::string filepath_to_read = mRootfolder + filename; //get full path
+
+                                                 std::shared_ptr<std::istream> ifs = std::make_shared<std::ifstream>(filepath_to_read, std::ios_base::binary);
+
+                                                 constexpr int ACK_TO_WAIT_FOR = 0;
+                                                 std::shared_ptr<Tftpsender> sender = std::make_shared<Tftpsender>(std::move(*sock), ifs, transfermode, ACK_TO_WAIT_FOR, std::bind(&TftpClient::on_sender_done, this, std::placeholders::_1, std::placeholders::_2) ,DEFAULT_BLOCKSIZE);
+                                                 mTransfer_running = true;
+                                                 mTransferDoneCallback = on_finish_callback;
+                                                 sender->start();
+                                             }
+                                         }
+                                         else
+                                         {
+                                             //TODO: send error to peer (neither OACk nor data, so incorrect response)
+
+                                             //TODO: give error code to client caller using callback
                                          }
 
                                      });
