@@ -2,6 +2,7 @@
 #include <map>
 #include "tftpserver.h"
 #include "tftpclient.h"
+#include <fstream>
 
 using std::string;
 using namespace std::chrono_literals;
@@ -77,7 +78,7 @@ void run(int argc, char* argv[])
     if(namedArgValues.at("--type=") == "client")
     {
         std::atomic_bool operationDone{false};
-        boost::system::error_code error;
+        TftpUserFacingErrorCode error;
 
         string argIP = static_cast<string>(argv[argc - 1]);
         try
@@ -111,7 +112,7 @@ void run(int argc, char* argv[])
                          namedArgValues.at("--file="),
                          client_trans_values,
                          TftpMode::OCTET,
-                         [&operationDone, &error](TftpClient *finishedClient, boost::system::error_code err)
+                         [&operationDone, &error](TftpClient *finishedClient, TftpUserFacingErrorCode err)
                          {
                              error = err;
                              operationDone.exchange(true);
@@ -126,13 +127,14 @@ void run(int argc, char* argv[])
                 ctx.restart();
                 operationDone.load();
             }while(!operationDone);
-            if(!error)
+            if(error != TftpUserFacingErrorCode::ERR_NOERR)
             {
                 std::cout << "Write/Read finished! Exiting\n";
+                //TODO: remove file if receiving and error condition
             }
             else
             {
-                std::cout << "An error occured while transferring the file: " + error.what() + "\nAborting.\n";
+                std::cout << "An error occured while transferring the file: " + error_message_from_code(error) + "\nAborting.\n";
             }
         }
         catch(std::runtime_error &e)

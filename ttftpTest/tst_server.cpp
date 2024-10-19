@@ -202,22 +202,26 @@ TEST(TTFTPServer, ServerStartsWRQConn)
     EXPECT_EQ(timeout,  false);
 }
 
-//TODO: test if the server sends the correct error response if an RRQ for a non-existing file is sent from a (mock) client
-TEST(TTFTPServer, CorrectErrorWhenRRQForNonExistingFile)
-{
-    EXPECT_EQ(true, false);
-}
-
 //TODO: test if the server correctly responds to a valid blocksize option RRQ request
 //This means that the correct OACK is sent, and that the server expects an ACK 0 before sending Data 1
 TEST(TTFTPServer, CorrectBlksizeNegotiationRRQ)
 {
     EXPECT_EQ(true, false);
+    //TODO: mock client sends blocksize negotiation to server
+    //TODO: check if server responds with correct OACK, and then with correct Data 1 only after receiving ACK 0
 }
 
 //TODO: test if the server correctly responds to a valid blocksize option WRQ request
 //This means that the correct OACK is sent, and that the server expects Data 1 to be send without sending an ACK 0 first
 TEST(TTFTPServer, CorrectBlksizeNegotiationWRQ)
+{
+    EXPECT_EQ(true, false);
+    //TODO: mock client sends blocksize negotiation to server
+    //TODO: check if server responds with correct OACK, and then with correct waiting for Data 1 by client
+}
+
+//TODO: test if the server sends the correct error response if an RRQ for a non-existing file is sent from a (mock) client
+TEST(TTFTPServer, CorrectErrorWhenRRQForNonExistingFile)
 {
     EXPECT_EQ(true, false);
 }

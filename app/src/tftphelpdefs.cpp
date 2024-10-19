@@ -60,3 +60,16 @@ bool TransactionOptionValues::isDefault() const
 
     return isDefault;
 }
+
+
+std::string error_message_from_code(TftpUserFacingErrorCode errorcode)
+{
+    switch(errorcode)
+    {
+    case TftpUserFacingErrorCode::ERR_NOERR:
+    {
+        return "No error";
+    }
+        //TODO: add other cases
+    }
+}

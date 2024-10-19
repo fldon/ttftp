@@ -11,7 +11,7 @@ using namespace testing;
 
 static constexpr unsigned int NUM_OF_BLOCKS = 5;
 
-static std::function<void(std::shared_ptr<TftpReceiver>, boost::system::error_code)> dummyCallback = [] (std::shared_ptr<TftpReceiver>, boost::system::error_code) {};
+static std::function<void(std::shared_ptr<TftpReceiver>, TftpUserFacingErrorCode)> dummyCallback = [] (std::shared_ptr<TftpReceiver>, TftpUserFacingErrorCode) {};
 
 //Test if the first Ack after connection establishment is ACK # 0 (server case)
 TEST(TTFTPreceiver, firstAckAfterStart_0)

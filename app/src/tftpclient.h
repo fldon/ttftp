@@ -23,12 +23,14 @@ public:
         std::string IN_filename,
         TransactionOptionValues IN_optionVals = TransactionOptionValues(),
         TftpMode IN_transferMode = TftpMode::OCTET,
-        std::function<void(TftpClient*, boost::system::error_code)> IN_onFinishCallback = [](TftpClient*, boost::system::error_code){});
+        std::function<void(TftpClient*, TftpUserFacingErrorCode)> IN_onFinishCallback = [](TftpClient*, TftpUserFacingErrorCode){});
 
     [[nodiscard]] bool is_transfer_running() const;
 private:
-    void on_sender_done(std::shared_ptr<Tftpsender> finished_sender, boost::system::error_code err);
-    void on_receiver_done(std::shared_ptr<TftpReceiver> finished_receiver, boost::system::error_code err);
+    void on_sender_done(std::shared_ptr<Tftpsender> finished_sender, TftpUserFacingErrorCode err);
+    void on_receiver_done(std::shared_ptr<TftpReceiver> finished_receiver, TftpUserFacingErrorCode err);
+
+    void on_oack_timeout(boost::system::error_code error);
 
     boost::asio::io_context &mIoContext;
     boost::asio::strand<boost::asio::io_context::executor_type> mStrand;
@@ -37,7 +39,9 @@ private:
 
     bool mTransfer_running = false;
 
-    std::function<void(TftpClient*, boost::system::error_code)> mTransferDoneCallback;
+    boost::asio::deadline_timer timeout_no_oack;
+
+    std::function<void(TftpClient*, TftpUserFacingErrorCode)> mTransferDoneCallback;
 
     static constexpr std::size_t BUFSIZE = 2048;
     std::array<uint8_t, BUFSIZE> mRecvBuffer;

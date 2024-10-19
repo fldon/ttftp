@@ -27,6 +27,10 @@ private:
     void removeSenderFromList(std::shared_ptr<Tftpsender> senderToRemove);
     void removeReceiverFromList(std::shared_ptr<TftpReceiver> receiverToRemove);
 
+    void handleOperationFinished(std::shared_ptr<Tftpsender> finishedSender, TftpUserFacingErrorCode err);
+    void handleOperationFinished(std::shared_ptr<TftpReceiver> finishedReceiver, TftpUserFacingErrorCode err);
+
+
     std::optional<TransactionOptionValues> parseOptionFields(const RequestMessage &request);
 
     boost::asio::io_context &mIoContext;

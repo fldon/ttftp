@@ -3,15 +3,15 @@
 #include "tftpmessages.h"
 #include <iostream>
 
-Tftpsender::Tftpsender(boost::asio::ip::udp::socket &&INsocket, std::shared_ptr<std::istream> inputstream, TftpMode INmode, const boost::asio::ip::address &INremoteaddress, uint16_t port, int IN_firstAck, std::function<void(std::shared_ptr<Tftpsender>, boost::system::error_code)> INOperationDoneCallback, std::size_t INblocksize)
+Tftpsender::Tftpsender(boost::asio::ip::udp::socket &&INsocket, std::shared_ptr<std::istream> inputstream, TftpMode INmode, const boost::asio::ip::address &INremoteaddress, uint16_t port, int IN_firstAck, std::function<void(std::shared_ptr<Tftpsender>, TftpUserFacingErrorCode)> INOperationDoneCallback, std::size_t INblocksize)
     :Tftpsender(std::move(INsocket), inputstream, INmode, IN_firstAck, INOperationDoneCallback, INblocksize)
 {
     mLastReceivedReceiverEndpoint = boost::asio::ip::udp::endpoint(INremoteaddress, port);
     onConnect();
 }
 
-Tftpsender::Tftpsender(boost::asio::ip::udp::socket &&INsocket, std::shared_ptr<std::istream> inputstream, TftpMode INmode, int IN_firstAck, std::function<void(std::shared_ptr<Tftpsender>, boost::system::error_code)> OperationDoneCallback, std::size_t INblocksize)
-    :blocksize(INblocksize), remoteConnSocket(std::move(INsocket)), lastsentdata(blocksize), lastsentdatacount(IN_firstAck), ackbuffer(OPCODELENGTH + BLOCKNRLENGTH), readTimeoutTimer(remoteConnSocket.get_executor()), mOperationDoneCallback(OperationDoneCallback), input(inputstream)
+Tftpsender::Tftpsender(boost::asio::ip::udp::socket &&IN_socket, std::shared_ptr<std::istream> inputstream, TftpMode IN_mode, int IN_firstAck, std::function<void(std::shared_ptr<Tftpsender>, TftpUserFacingErrorCode)> IN_OperationDoneCallback, std::size_t IN_blocksize)
+    :blocksize(IN_blocksize), remoteConnSocket(std::move(IN_socket)), lastsentdata(blocksize), lastsentdatacount(IN_firstAck), ackbuffer(OPCODELENGTH + BLOCKNRLENGTH), readTimeoutTimer(remoteConnSocket.get_executor()), mOperationDoneCallback(IN_OperationDoneCallback), input(inputstream)
 {
     if(!remoteConnSocket.is_open())
     {
@@ -221,6 +221,14 @@ void Tftpsender::endOperation(boost::system::error_code err)
     {
         operationEnded = true;
         remoteConnSocket.close();
-        mOperationDoneCallback(shared_from_this(), err);
+        //TODO: disambiguate supplied error code depending on err
+        if(err)
+        {
+            mOperationDoneCallback(shared_from_this(), TftpUserFacingErrorCode::ERR_UNSPECIFIED);
+        }
+        else
+        {
+            mOperationDoneCallback(shared_from_this(), TftpUserFacingErrorCode::ERR_NOERR);
+        }
     }
 }

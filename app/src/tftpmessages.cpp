@@ -211,8 +211,19 @@ bool DataMessage::decode(const std::string &IN_dataStr)
     uint16_t blockNr = ntohs(*reinterpret_cast<const uint16_t*>(IN_dataStr.data() + OPCODELENGTH));
     mBlockNr = blockNr;
 
-    mData = std::vector<unsigned char>(mBlocksize, 0);
-    std::copy(IN_dataStr.begin() + CONTROLBYTES, IN_dataStr.end(), mData.begin());
+    //mData = std::vector<unsigned char>(mBlocksize, 0);
+    //std::copy(IN_dataStr.begin() + CONTROLBYTES, IN_dataStr.end(), mData.begin());
+
+    //Data can contain less than blocksize characters: internal vector should reflect that
+    mData = std::vector<unsigned char> (std::cbegin(IN_dataStr) + CONTROLBYTES, std::cend(IN_dataStr));
+
+    assert(mData.size() <= mBlocksize);
+
+    if(mData.size() < mBlocksize)
+    {
+        int test = 5;
+    }
+
     //Data was decoded completely
     return true;
 }
@@ -234,6 +245,15 @@ std::string DataMessage::encode() const
     std::copy(mData.begin(), mData.end(), IOBuffer.begin() + CONTROLBYTES);
 
     return std::string(IOBuffer.begin(), IOBuffer.end());
+}
+
+/*!
+ * \brief DataMessage::get_data
+ * \return
+ */
+std::string DataMessage::get_data() const
+{
+    return std::string(std::cbegin(mData), std::cend(mData));
 }
 
 void DataMessage::setBlockNr(block_nr_t IN_nr)

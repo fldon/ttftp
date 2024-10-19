@@ -26,7 +26,8 @@ TftpClient::TftpClient(std::string INrootfolder, boost::asio::io_context &ctx)
     mIoContext(ctx),
     mStrand(boost::asio::make_strand(mIoContext)),
     mRootfolder(INrootfolder),
-    mTransfer_running(false)
+    mTransfer_running(false),
+    timeout_no_oack(mStrand)
 {
 }
 
@@ -38,7 +39,7 @@ TftpClient::TftpClient(std::string INrootfolder, boost::asio::io_context &ctx)
  * \param transfermode
  * \param on_finish_callback
  */
-void TftpClient::start(boost::asio::ip::address server_address, TftpOpcode requestType, std::string filename, TransactionOptionValues IN_optionVals, TftpMode transfermode, std::function<void(TftpClient*, boost::system::error_code)> on_finish_callback)
+void TftpClient::start(boost::asio::ip::address server_address, TftpOpcode requestType, std::string filename, TransactionOptionValues IN_optionVals, TftpMode transfermode, std::function<void(TftpClient*, TftpUserFacingErrorCode)> on_finish_callback)
 {
     mRecvBuffer.fill(0);
     if(server_address.is_unspecified())
@@ -70,12 +71,21 @@ void TftpClient::start(boost::asio::ip::address server_address, TftpOpcode reque
         //wait for OACK: then enable the ACKed options with the ACKed values
         if(!IN_optionVals.isDefault())
         {
-            //TODO: include timeout behavior if no answer arrives at all
+            //TODO: handle invalid OACK values: answer with error and stop
+            timeout_no_oack.expires_from_now(boost::posix_time::seconds(RETRANSMISSION_TIME * 4));
+            timeout_no_oack.async_wait([=] (boost::system::error_code err)
+                                       {
+                                           if(err != boost::asio::error::operation_aborted)
+                                           {
+                                               sock->cancel();
+                                           }
+                                       });
             sock->async_receive_from(boost::asio::buffer(mRecvBuffer, mRecvBuffer.size()), mServerEndpoint, [=] (boost::system::error_code err, std::size_t receivedbytes)
                                      {
+                                         timeout_no_oack.cancel();
                                          OptionACKMessage received_oack_msg;
                                          DataMessage received_data_msg;
-                                         if(received_oack_msg.decode(std::string(mRecvBuffer.begin(), mRecvBuffer.begin() + receivedbytes)))
+                                         if(!err && received_oack_msg.decode(std::string(mRecvBuffer.begin(), mRecvBuffer.begin() + receivedbytes)))
                                          {
                                              TransactionOptionValues received_options;
                                              if(received_options.setOptionsFromMap(received_oack_msg.getOptVals()))
@@ -102,11 +112,13 @@ void TftpClient::start(boost::asio::ip::address server_address, TftpOpcode reque
                                                  std::string error_msg_to_send = response_msg.encode();
                                                  sock->send_to(boost::asio::buffer(error_msg_to_send, error_msg_to_send.size()), mServerEndpoint);
 
-                                                 //TODO: give error code to client caller using callback
+                                                 //give error code to client caller using callback
+                                                 mTransferDoneCallback = on_finish_callback;
+                                                 on_receiver_done({}, TftpUserFacingErrorCode::ERR_OPT_NEGOTIATION);
                                              }
                                          }
                                          //We received a data msg instead
-                                         else if(received_data_msg.decode(std::string(mRecvBuffer.begin(), mRecvBuffer.begin() + receivedbytes)))
+                                         else if(!err && received_data_msg.decode(std::string(mRecvBuffer.begin(), mRecvBuffer.begin() + receivedbytes)))
                                          {
                                              {
                                                  //Create normal receiver, with default parameters
@@ -117,7 +129,7 @@ void TftpClient::start(boost::asio::ip::address server_address, TftpOpcode reque
 
                                                  std::shared_ptr<std::ostream> ofs(new std::ofstream(filepath_to_write, std::ios_base::binary));
 
-                                                 std::shared_ptr<TftpReceiver> receiver = std::make_shared<TftpReceiver>(std::move(*sock), ofs, transfermode, std::bind(&TftpClient::on_receiver_done, this, std::placeholders::_1, std::placeholders::_2), DEFAULT_BLOCKSIZE);
+                                                 std::shared_ptr<TftpReceiver> receiver = std::make_shared<TftpReceiver>(std::move(*sock), ofs, transfermode, mServerEndpoint.address(), mServerEndpoint.port(), received_data_msg, std::bind(&TftpClient::on_receiver_done, this, std::placeholders::_1, std::placeholders::_2), DEFAULT_BLOCKSIZE);
                                                  mTransfer_running = true;
                                                  mTransferDoneCallback = on_finish_callback;
                                                  receiver->start();
@@ -125,9 +137,13 @@ void TftpClient::start(boost::asio::ip::address server_address, TftpOpcode reque
                                          }
                                          else
                                          {
-                                             //TODO: send error to peer (neither OACk nor data, so incorrect response)
+                                             //TODO: check for timeout error specifically
 
-                                             //TODO: give error code to client caller using callback
+                                             //TODO: send error to peer if socket still valid (neither OACk nor data, so incorrect response or no response or other error)
+
+                                             //give error code to client caller using callback
+                                             mTransferDoneCallback = on_finish_callback;
+                                             on_receiver_done({}, TftpUserFacingErrorCode::ERR_OPT_NEGOTIATION);
                                          }
                                      });
         }
@@ -167,13 +183,21 @@ void TftpClient::start(boost::asio::ip::address server_address, TftpOpcode reque
         //wait for OACK: then enable the ACKed options with the ACKed values
         if(!IN_optionVals.isDefault())
         {
-            //TODO: include timeout behavior
+            timeout_no_oack.expires_from_now(boost::posix_time::seconds(RETRANSMISSION_TIME * 4));
+            timeout_no_oack.async_wait([=] (boost::system::error_code err)
+                                       {
+                                           if(err != boost::asio::error::operation_aborted)
+                                           {
+                                               sock->cancel();
+                                           }
+                                       });
             //TODO: handle invalid OACK values: answer with error and stop
             sock->async_receive_from(boost::asio::buffer(mRecvBuffer, mRecvBuffer.size()), mServerEndpoint, [=] (boost::system::error_code err, std::size_t receivedbytes)
                                      {
+                                         timeout_no_oack.cancel();
                                          OptionACKMessage received_oack_msg;
                                          AckMessage received_ack_msg;
-                                         if(received_oack_msg.decode(std::string(mRecvBuffer.begin(), mRecvBuffer.begin() + receivedbytes)))
+                                         if(!err && received_oack_msg.decode(std::string(mRecvBuffer.begin(), mRecvBuffer.begin() + receivedbytes)))
                                          {
                                              TransactionOptionValues received_options;
                                              if( received_options.setOptionsFromMap(received_oack_msg.getOptVals()) )
@@ -200,23 +224,25 @@ void TftpClient::start(boost::asio::ip::address server_address, TftpOpcode reque
                                                  std::string error_msg_to_send = response_msg.encode();
                                                  sock->send_to(boost::asio::buffer(error_msg_to_send, error_msg_to_send.size()), mServerEndpoint);
 
-                                                 //TODO: give error code to client caller using callback
+                                                 //give error code to client caller using callback
+                                                 mTransferDoneCallback = on_finish_callback;
+                                                 on_sender_done({}, TftpUserFacingErrorCode::ERR_OPT_NEGOTIATION);
                                              }
                                          }
                                          //We received an ack msg instead
-                                         else if(received_ack_msg.decode(std::string(mRecvBuffer.begin(), mRecvBuffer.begin() + receivedbytes)))
+                                         else if(!err && received_ack_msg.decode(std::string(mRecvBuffer.begin(), mRecvBuffer.begin() + receivedbytes)))
                                          {
                                              {
                                                  //Create normal sender, with default parameters
                                                  //We ignore this ack msg and expect it to be re-sent by the peer, for simplicitly
 
-                                                 //Sender is constructed without knowing remote endpoint of server - it will receive the first ACK for block 0, or time out
+                                                 //Sender is constructed without knowing remote endpoint of server - it will send DATA 1, just like the server would when knowing the client address
                                                  std::string filepath_to_read = mRootfolder + filename; //get full path
 
                                                  std::shared_ptr<std::istream> ifs = std::make_shared<std::ifstream>(filepath_to_read, std::ios_base::binary);
 
-                                                 constexpr int ACK_TO_WAIT_FOR = 0;
-                                                 std::shared_ptr<Tftpsender> sender = std::make_shared<Tftpsender>(std::move(*sock), ifs, transfermode, ACK_TO_WAIT_FOR, std::bind(&TftpClient::on_sender_done, this, std::placeholders::_1, std::placeholders::_2) ,DEFAULT_BLOCKSIZE);
+                                                 constexpr int ACK_TO_WAIT_FOR = 1;
+                                                 std::shared_ptr<Tftpsender> sender = std::make_shared<Tftpsender>(std::move(*sock), ifs, transfermode, mServerEndpoint.address(), mServerEndpoint.port(), ACK_TO_WAIT_FOR, std::bind(&TftpClient::on_sender_done, this, std::placeholders::_1, std::placeholders::_2), DEFAULT_BLOCKSIZE);
                                                  mTransfer_running = true;
                                                  mTransferDoneCallback = on_finish_callback;
                                                  sender->start();
@@ -224,9 +250,13 @@ void TftpClient::start(boost::asio::ip::address server_address, TftpOpcode reque
                                          }
                                          else
                                          {
-                                             //TODO: send error to peer (neither OACk nor data, so incorrect response)
+                                             //TODO: check for timeout error specifically, then return that error
 
-                                             //TODO: give error code to client caller using callback
+                                             //TODO: send error to peer if socket still valid (neither OACk nor data, so incorrect response or no response or other error)
+
+                                             //give error code to client caller using callback
+                                             mTransferDoneCallback = on_finish_callback;
+                                             on_sender_done({}, TftpUserFacingErrorCode::ERR_OPT_NEGOTIATION);
                                          }
 
                                      });
@@ -260,12 +290,12 @@ bool TftpClient::is_transfer_running() const
 }
 
 
-void TftpClient::on_sender_done(std::shared_ptr<Tftpsender> finished_sender, boost::system::error_code err)
+void TftpClient::on_sender_done(std::shared_ptr<Tftpsender> finished_sender, TftpUserFacingErrorCode err)
 {
     mTransfer_running = false;
     mTransferDoneCallback(this, err);
 }
-void TftpClient::on_receiver_done(std::shared_ptr<TftpReceiver> finished_receiver, boost::system::error_code err)
+void TftpClient::on_receiver_done(std::shared_ptr<TftpReceiver> finished_receiver, TftpUserFacingErrorCode err)
 {
     mTransfer_running = false;
     mTransferDoneCallback(this, err);

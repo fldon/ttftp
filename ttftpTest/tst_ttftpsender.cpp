@@ -14,7 +14,7 @@ using namespace testing;
 constexpr unsigned int NUM_OF_BLOCKS = 5;
 constexpr int BLKSIZE = 512;
 
-static std::function<void(std::shared_ptr<Tftpsender>, boost::system::error_code)> dummyCallback = [] (std::shared_ptr<Tftpsender>, boost::system::error_code) {};
+static std::function<void(std::shared_ptr<Tftpsender>, TftpUserFacingErrorCode)> dummyCallback = [] (std::shared_ptr<Tftpsender>, TftpUserFacingErrorCode) {};
 
 //Test if ttftpsender starts with correct data block (block 1), assuming a connection has already been made - server case
 TEST(TTFTPSender, FirstBlockAfterStart_Server)

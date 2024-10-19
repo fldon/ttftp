@@ -129,7 +129,7 @@ void TftpServer::HandleSubRequest_RRQ(const RequestMessage &request)
 
     std::shared_ptr<std::istream> ifs(new std::ifstream(filename_to_read, std::ios_base::binary));
 
-    std::shared_ptr<Tftpsender> sender = std::make_shared<Tftpsender>(std::move(newsock), ifs, str2mode(mode), remoteaddress, remoteport, expected_ack, std::bind(&TftpServer::removeSenderFromList, this, std::placeholders::_1), blocksize_to_use);
+    std::shared_ptr<Tftpsender> sender = std::make_shared<Tftpsender>(std::move(newsock), ifs, str2mode(mode), remoteaddress, remoteport, expected_ack, std::bind(static_cast<void(TftpServer::*)(std::shared_ptr<Tftpsender>, TftpUserFacingErrorCode)>(&TftpServer::handleOperationFinished), this, std::placeholders::_1, std::placeholders::_2), blocksize_to_use);
     mSenderList.push_back(sender);
     sender->start();
 }
@@ -179,7 +179,7 @@ void TftpServer::HandleSubRequest_WRQ(const RequestMessage &request)
 
     std::shared_ptr<std::ostream> ofs(new std::ofstream(filename_to_write, std::ios_base::binary | std::ios_base::app));
 
-    std::shared_ptr<TftpReceiver> receiver = std::make_shared<TftpReceiver>(std::move(newsock), ofs, str2mode(mode), remoteaddress, remoteport, std::bind(&TftpServer::removeReceiverFromList, this, std::placeholders::_1), blocksize_to_use);
+    std::shared_ptr<TftpReceiver> receiver = std::make_shared<TftpReceiver>(std::move(newsock), ofs, str2mode(mode), remoteaddress, remoteport, std::bind(static_cast<void(TftpServer::*)(std::shared_ptr<TftpReceiver>, TftpUserFacingErrorCode)>(&TftpServer::handleOperationFinished), this, std::placeholders::_1, std::placeholders::_2), blocksize_to_use);
     mReceiverList.push_back(receiver);
     receiver->start();
 }
@@ -237,5 +237,31 @@ std::optional<TransactionOptionValues> TftpServer::parseOptionFields(const Reque
 
     //Some value was invalid
     return {};
+}
+
+void TftpServer::handleOperationFinished(std::shared_ptr<Tftpsender> finishedSender, TftpUserFacingErrorCode err)
+{
+    if(err == TftpUserFacingErrorCode::ERR_NOERR)
+    {
+        std::cout << "Finished sending file"; //TODO what file?
+    }
+    else
+    {
+        std::cout << "Error while sending file"; //TODO: more info
+    }
+    removeSenderFromList(finishedSender);
+}
+void TftpServer::handleOperationFinished(std::shared_ptr<TftpReceiver> finishedReceiver, TftpUserFacingErrorCode err)
+{
+    if(err == TftpUserFacingErrorCode::ERR_NOERR)
+    {
+        std::cout << "Finished receiving file"; //TODO what file?
+    }
+    else
+    {
+        std::cout << "Error while receiving file"; //TODO: more info
+    }
+    removeReceiverFromList(finishedReceiver);
+    //TODO: remove file if error condition
 }
 

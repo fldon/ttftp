@@ -441,7 +441,7 @@ TEST(TTFTPClient, CorrectCallbackOnFinish)
     std::future<std::size_t> my_future =
         testMockServerConnSocket.async_receive_from(boost::asio::buffer(buffer, buffer.size()), clientEndpoint, boost::asio::use_future);
 
-    client.start(boost::asio::ip::make_address("127.0.0.1"), TftpOpcode::WRQ, filename, TransactionOptionValues(), TftpMode::OCTET, [&] (TftpClient*, boost::system::error_code ec)
+    client.start(boost::asio::ip::make_address("127.0.0.1"), TftpOpcode::WRQ, filename, TransactionOptionValues(), TftpMode::OCTET, [&] (TftpClient*, TftpUserFacingErrorCode ec)
                  {
                      process_finished = true;
                      testIoContext.stop();
@@ -921,7 +921,7 @@ TEST(TTFTPClient, CorrectBlksizeNegotiationWRQ)
 }
 
 //test if the client keeps going with default values when its option Request is ignored by the mock server with RRQ
-TEST(TTFTPClient, CLientRevertToDefaultWhenNoOACK_RRQ)
+TEST(TTFTPClient, CLientRevertToDefaultWhenWrongOACK_RRQ)
 {
     //Create client with RRQ and blksize option set to a valid value
 
@@ -997,15 +997,6 @@ TEST(TTFTPClient, CLientRevertToDefaultWhenNoOACK_RRQ)
             testMockServerConnSocket.send_to(boost::asio::buffer(data_string_to_send, data_string_to_send.size()), clientEndpoint);
         }
 
-        //TODO: this is VERY ugly. We wait because the client throws the first data away and counts on it being re-sent
-        //Instead, the client should directly use the data 1 block it receives, but for that I have to change the interface/ctor
-        std::this_thread::sleep_for(5s);
-        //send the data 1 block again (because client throws the first one away)
-        {
-            std::string data_string_to_send = data_msg_to_send.encode();
-            testMockServerConnSocket.send_to(boost::asio::buffer(data_string_to_send, data_string_to_send.size()), clientEndpoint);
-        }
-
         auto futurestatus = my_future.wait_for(15s);
         if(futurestatus == std::future_status::timeout)
         {
@@ -1028,7 +1019,7 @@ TEST(TTFTPClient, CLientRevertToDefaultWhenNoOACK_RRQ)
 }
 
 //test if the client keeps going with default values when its option Request is ignored by the mock server with WRQ
-TEST(TTFTPClient, CLientRevertToDefaultWhenNoOACK_WRQ)
+TEST(TTFTPClient, CLientRevertToDefaultWhenWrongOACK_WRQ)
 {
     //Create client with RRQ and blksize option set to a valid value
 
@@ -1116,15 +1107,6 @@ TEST(TTFTPClient, CLientRevertToDefaultWhenNoOACK_WRQ)
             testMockServerConnSocket.send_to(boost::asio::buffer(ack_string_to_send, ack_string_to_send.size()), clientEndpoint);
         }
 
-        //TODO: this is VERY ugly. We wait because the client throws the first data away and counts on it being re-sent
-        //Instead, the client should directly use the data 1 block it receives, but for that I have to change the interface/ctor
-        std::this_thread::sleep_for(5s);
-        //send the ACK 0 block again (because client throws the first one away)
-        {
-            std::string ack_string_to_send = ack_msg_to_send.encode();
-            testMockServerConnSocket.send_to(boost::asio::buffer(ack_string_to_send, ack_string_to_send.size()), clientEndpoint);
-        }
-
         auto futurestatus = my_future.wait_for(15s);
         if(futurestatus == std::future_status::timeout)
         {
@@ -1146,3 +1128,10 @@ TEST(TTFTPClient, CLientRevertToDefaultWhenNoOACK_WRQ)
     testIoContext.stop();
     t.join();
 }
+
+//TODO: test if the client sends the correct error response if a WRQ for a non-existing file is sent
+TEST(TTFTPClient, CorrectErrorWhenWRQNonExistingFile)
+{
+    EXPECT_EQ(true, false);
+}
+

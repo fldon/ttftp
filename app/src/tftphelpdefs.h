@@ -8,6 +8,12 @@
 enum class TftpOpcode : uint16_t {INVALID = 0, RRQ = 1, WRQ, DATA, ACK, ERROR, OACK};
 enum class TftpMode {INVALID, OCTET};
 
+enum class TftpUserFacingErrorCode {ERR_NOERR = 0, ERR_UNSPECIFIED = 1, ERR_OACK_TIMEOUT = 2, ERR_OUTPUT_FILE_OPEN = 3,
+                                     ERR_REQUEST = 4,
+                                     ERR_OPT_NEGOTIATION = 8};
+
+std::string error_message_from_code(TftpUserFacingErrorCode errorcode);
+
 [[nodiscard]] TftpMode str2mode(std::string mode);
 [[nodiscard]] std::string mode2str(TftpMode mode);
 

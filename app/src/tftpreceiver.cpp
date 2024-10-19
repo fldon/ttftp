@@ -1,7 +1,7 @@
 #include "tftpreceiver.h"
 #include "tftphelpdefs.h"
 
-TftpReceiver::TftpReceiver(boost::asio::ip::udp::socket &&INsocket, std::shared_ptr<std::ostream> outputstream, TftpMode INmode, const boost::asio::ip::address &remoteaddress, uint16_t port, std::function<void(std::shared_ptr<TftpReceiver>, boost::system::error_code)> INoperationDoneCallback, std::size_t INblocksize)
+TftpReceiver::TftpReceiver(boost::asio::ip::udp::socket &&INsocket, std::shared_ptr<std::ostream> outputstream, TftpMode INmode, const boost::asio::ip::address &remoteaddress, uint16_t port, std::function<void(std::shared_ptr<TftpReceiver>, TftpUserFacingErrorCode)> INoperationDoneCallback, std::size_t INblocksize)
     :TftpReceiver(std::move(INsocket), outputstream, INmode, INoperationDoneCallback, INblocksize)
 {
     mLastReceivedSenderEndpoint = boost::asio::ip::udp::endpoint(remoteaddress, port);
@@ -11,7 +11,7 @@ TftpReceiver::TftpReceiver(boost::asio::ip::udp::socket &&INsocket, std::shared_
 TftpReceiver::TftpReceiver(boost::asio::ip::udp::socket &&INsocket,
                            std::shared_ptr<std::ostream> outputstream,
                            TftpMode INmode,
-                           std::function<void(std::shared_ptr<TftpReceiver>, boost::system::error_code)> INoperationDoneCallback,
+                           std::function<void(std::shared_ptr<TftpReceiver>, TftpUserFacingErrorCode)> INoperationDoneCallback,
                            std::size_t INblocksize)
     :blocksize(INblocksize), remoteConnSocket(std::move(INsocket)), databuffer(blocksize + CONTROLBYTES), readTimeoutTimer(remoteConnSocket.get_executor()), mOperationDoneCallback(INoperationDoneCallback), output(outputstream)
 {
@@ -19,6 +19,26 @@ TftpReceiver::TftpReceiver(boost::asio::ip::udp::socket &&INsocket,
     {
         throw std::runtime_error("Socket supplied in ctor must be open");
     }
+}
+
+TftpReceiver::TftpReceiver(boost::asio::ip::udp::socket &&INsocket,
+                           std::shared_ptr<std::ostream> outputstream,
+                           TftpMode INmode,
+                           const boost::asio::ip::address &remoteaddress,
+                           uint16_t port,
+                           const DataMessage &IN_data_1_msg,
+                           std::function<void(std::shared_ptr<TftpReceiver>, TftpUserFacingErrorCode err)> INoperationDoneCallback,
+                           std::size_t INblocksize)
+    :TftpReceiver(std::move(INsocket), outputstream, INmode, remoteaddress, port, INoperationDoneCallback, INblocksize)
+{
+    //Write contents of data buffer into file
+    if(!output || !(*output))
+    {
+        sendErrorMsg(1, "Requested file could not be opened for output", mSenderEndpoint);
+        endOperation(TftpUserFacingErrorCode::ERR_OUTPUT_FILE_OPEN);
+    }
+    output->write(IN_data_1_msg.get_data().c_str(), IN_data_1_msg.get_data().size());
+    lastreceiveddatacount = 1; //We have already received block Nr. 1
 }
 
 void TftpReceiver::start()
@@ -69,7 +89,7 @@ void TftpReceiver::checkReceivedBlock(boost::system::error_code err, std::size_t
             else
             {
                 DataMessage received_msg(blocksize);
-                bool valid_msg_received = received_msg.decode(std::string(databuffer.begin(), databuffer.end()));
+                bool valid_msg_received = received_msg.decode(std::string(databuffer.begin(), databuffer.begin() + sentbytes));
 
                 if(!valid_msg_received)
                 {
@@ -102,11 +122,10 @@ void TftpReceiver::checkReceivedBlock(boost::system::error_code err, std::size_t
                         if(!(*output))
                         {
                             sendErrorMsg(1, "Requested file could not be opened for output", mSenderEndpoint);
-                            throw std::runtime_error("Output file could not be opened!");
-                            //TODO: what errorcode to set?
-                            endOperation();
+                            endOperation(TftpUserFacingErrorCode::ERR_OUTPUT_FILE_OPEN);
                         }
-                        output->write(databuffer.data() + CONTROLBYTES, sentbytes - CONTROLBYTES);
+                        //output->write(databuffer.data() + CONTROLBYTES, sentbytes - CONTROLBYTES);
+                        output->write(received_msg.get_data().c_str(), received_msg.get_data().size());
 
                         //Check number of sent bytes and end connection if it is < blocksize
                         if(sentbytes == blocksize + CONTROLBYTES)
@@ -259,6 +278,21 @@ void TftpReceiver::onConnect()
  * \brief Call the constructor-provided callback when the operation ends (due to error or regular end of transfer)
  */
 void TftpReceiver::endOperation(boost::system::error_code err)
+{
+    if(!operationEnded)
+    {
+        operationEnded = true;
+        remoteConnSocket.close();
+        if(err)
+            mOperationDoneCallback(shared_from_this(), TftpUserFacingErrorCode::ERR_UNSPECIFIED);
+        else
+        {
+            mOperationDoneCallback(shared_from_this(), TftpUserFacingErrorCode::ERR_NOERR);
+        }
+    }
+}
+
+void TftpReceiver::endOperation(TftpUserFacingErrorCode err)
 {
     if(!operationEnded)
     {

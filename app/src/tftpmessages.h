@@ -63,6 +63,7 @@ public:
 
     bool decode(const std::string &IN_dataStr) override;
     [[nodiscard]] std::string encode() const override;
+    [[nodiscard]] std::string get_data() const;
 
     [[nodiscard]] block_nr_t getBlockNr() const;
     void setBlockNr(block_nr_t IN_nr);

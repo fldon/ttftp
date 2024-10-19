@@ -14,22 +14,21 @@
 class Tftpsender : public std::enable_shared_from_this<Tftpsender>
 {
 public:
-    //Ctor if remote endpoint is known (for server use)
+    //Ctor if remote endpoint is known (for server use, send Data 1 directly)
     Tftpsender(boost::asio::ip::udp::socket &&IN_socket,
         std::shared_ptr<std::istream> IN_inputstream, TftpMode IN_mode,
         const boost::asio::ip::address &IN_remoteaddress,
         uint16_t IN_port,
         int IN_firstAck,
-        std::function<void(std::shared_ptr<Tftpsender>, boost::system::error_code)> IN_operationDoneCallback = [](std::shared_ptr<Tftpsender>, boost::system::error_code){},
+        std::function<void(std::shared_ptr<Tftpsender>, TftpUserFacingErrorCode)> IN_operationDoneCallback = [](std::shared_ptr<Tftpsender>, TftpUserFacingErrorCode){},
         std::size_t IN_blocksize = DEFAULT_BLOCKSIZE);
 
-    //Ctor if remote endpoint is not known yet (for client use)
+    //Ctor if remote endpoint is not known yet (for client use, wait for ACK 0)
     Tftpsender(boost::asio::ip::udp::socket &&IN_socket,
         std::shared_ptr<std::istream> IN_inputstream, TftpMode IN_mode,
         int IN_firstAck,
-        std::function<void(std::shared_ptr<Tftpsender>, boost::system::error_code)> IN_operationDoneCallback = [](std::shared_ptr<Tftpsender>, boost::system::error_code){},
+        std::function<void(std::shared_ptr<Tftpsender>, TftpUserFacingErrorCode)> IN_operationDoneCallback = [](std::shared_ptr<Tftpsender>, TftpUserFacingErrorCode){},
         std::size_t IN_blocksize = DEFAULT_BLOCKSIZE);
-
 
     void start();
 private:
@@ -58,7 +57,7 @@ private:
     boost::asio::deadline_timer readTimeoutTimer;
     uint16_t timeoutcount{0};
 
-    std::function<void(std::shared_ptr<Tftpsender>, boost::system::error_code)> mOperationDoneCallback;
+    std::function<void(std::shared_ptr<Tftpsender>, TftpUserFacingErrorCode)> mOperationDoneCallback;
 
     boost::asio::ip::udp::endpoint mReceiverEndpoint;
     boost::asio::ip::udp::endpoint mLastReceivedReceiverEndpoint;
