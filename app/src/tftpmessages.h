@@ -41,7 +41,7 @@ public:
     [[nodiscard]] TftpMode getMode() const;
 
     void setOptVals(const std::map<std::string, std::string> &IN_optVals);
-    void setOptVals(const std::map<std::string, std::string> &&IN_optVals);
+    void setOptVals(std::map<std::string, std::string> &&IN_optVals);
     void setOptVals(const TransactionOptionValues &IN_optVals);
 
     //Does not return Option vals struct because a received message could contain unknown opt vals
@@ -125,7 +125,7 @@ public:
     [[nodiscard]] std::string encode() const override;
 
     void setOptVals(const std::map<std::string, std::string> &IN_optVals);
-    void setOptVals(const std::map<std::string, std::string> &&IN_optVals);
+    void setOptVals(std::map<std::string, std::string> &&IN_optVals);
     [[nodiscard]] const std::map<std::string, std::string>& getOptVals() const;
 
 private:

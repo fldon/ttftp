@@ -168,7 +168,7 @@ void RequestMessage::setOptVals(const std::map<std::string, std::string> &IN_opt
     mOptionValues = IN_optVals;
 }
 
-void RequestMessage::setOptVals(const std::map<std::string, std::string> &&IN_optVals)
+void RequestMessage::setOptVals(std::map<std::string, std::string> &&IN_optVals)
 {
     mOptionValues = std::move(IN_optVals);
 }
@@ -403,7 +403,7 @@ void OptionACKMessage::setOptVals(const std::map<std::string, std::string> &IN_o
     mOptionValues = IN_optVals;
 }
 
-void OptionACKMessage::setOptVals(const std::map<std::string, std::string> &&IN_optVals)
+void OptionACKMessage::setOptVals(std::map<std::string, std::string> &&IN_optVals)
 {
     mOptionValues = std::move(IN_optVals);
 }
