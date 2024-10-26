@@ -3,11 +3,16 @@ simple trivial file transfer protocol server and client combo.
 For usage info, simply run the binary without parameters.
 
 Implements the following RFCs:
+
 1350 (currently without netascii and mail modes)
+
 2347
+
 2348
 
+
 TODO:
+
 RFC 2349
 
 Build instructions:
