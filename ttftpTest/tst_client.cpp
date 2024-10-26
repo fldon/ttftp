@@ -1129,9 +1129,62 @@ TEST(TTFTPClient, CLientRevertToDefaultWhenWrongOACK_WRQ)
     t.join();
 }
 
-//TODO: test if the client sends the correct error response if a WRQ for a non-existing file is sent
-TEST(TTFTPClient, CorrectErrorWhenWRQNonExistingFile)
+//test if the client returns the correct error response if a WRQ for a non-existing file is sent
+TEST(TTFTPClient, CorrectErrorWhenWRQNonExistingFileToUser)
 {
-    EXPECT_EQ(true, false);
-}
+    //fill initial read request message: opcode, filename-string, 0 byte, mode-string, 0 byte
+    //mode-string is for now "octet", nothing else is supported
+    std::vector<char> WRQmsg(sizeof(uint16_t));
+    uint16_t opcode = static_cast<uint16_t>(TftpOpcode::WRQ);
 
+
+
+    std::string filename = "RRQWriteTestFile.txt";
+    std::string mode = "octet";
+
+    *reinterpret_cast<uint16_t*>(WRQmsg.data()) = htons(opcode);
+    for(auto it = filename.begin(); it != filename.end(); ++it)
+    {
+        WRQmsg.push_back(*it);
+    }
+    WRQmsg.push_back(0);
+
+    for(auto it = mode.begin(); it != mode.end(); ++it)
+    {
+        WRQmsg.push_back(*it);
+    }
+    WRQmsg.push_back(0);
+
+    //The above RRQMsg should be received from the client when it is created with the octed mode and the filename
+
+
+    boost::asio::io_context testIoContext;
+    uint16_t testport = SERVER_LISTEN_PORT; //local port
+    boost::asio::ip::udp::endpoint testMockServerEndpoint(boost::asio::ip::udp::v4(), testport); //Local endpoint for mock server
+    boost::asio::ip::udp::socket testMockServerConnSocket(testIoContext, testMockServerEndpoint);
+
+
+    boost::asio::ip::udp::endpoint clientEndpoint; //endpoint from client after request is received
+
+
+    TftpClient client("", testIoContext);
+
+    std::array<char, 1024> buffer;
+    buffer.fill(0);
+
+    //Remove test file if it already exists
+    std::remove(filename.c_str());
+
+
+    //Do NOT create a test file, we want to induce an error
+    bool correct_error_set = false;
+
+
+    client.start(boost::asio::ip::make_address("127.0.0.1"), TftpOpcode::WRQ, filename, TransactionOptionValues(), TftpMode::OCTET, [&](TftpClient*, TftpUserFacingErrorCode err)
+                 {
+        correct_error_set = err == TftpUserFacingErrorCode::ERR_INPUT_FILE_OPEN;
+    });
+    std::thread t([&testIoContext] () {testIoContext.run();});
+    t.join();
+    EXPECT_TRUE(correct_error_set);
+}
