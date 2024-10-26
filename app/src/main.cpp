@@ -13,7 +13,7 @@ void run(int argc, char* argv[]);
 
 //TODO: include mode (currently only octet mode so no point)
 /*
- * Usage: TTFTP <--type=server/client> <--root=rootfolder> <Client: --request=read/write> <Client: --file=filename> <Client: remote IP (ipv4 and netmask)>
+ * Usage: TTFTP <--type=server/client> <--root=rootfolder> <--port=portnumber> <Client: --request=read/write> <Client: --file=filename> <Client: remote IP (ipv4 and netmask)>
  * */
 int main(int argc, char* argv[])
 {
@@ -22,7 +22,7 @@ int main(int argc, char* argv[])
 
 void print_usage_msg()
 {
-    std::string msg = "Usage: TTFTP <--type=server/client> <--root=rootfolder> <Client: --request=read/write> <Client: --file=filename> <Client: remote IP (ipv4 or ipv6)>";
+    std::string msg = "Usage: TTFTP <--type=server/client> <--root=rootfolder> <--port=portnumber> <Client: --request=read/write> <Client: --file=filename> <Client: remote IP (ipv4 or ipv6)>";
     std::cout << msg << "\n";
     exit(1);
 }
