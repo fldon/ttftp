@@ -7,8 +7,6 @@
 #include "tftphelpdefs.h"
 #include "tftpmessages.h"
 
-//TODO: add explicit option parameter for starting transfer by sending ACK 0 (server case and also client case when options are negotiated)
-
 //TODO: instead of adding options like blocksize individually, use one TransactionOptionValues member-object
 
 /*
@@ -47,7 +45,7 @@ public:
 private:
     void sendNextAck(bool lastAck = false);
     void checkReceivedBlock(boost::system::error_code err, std::size_t sentbytes);
-    void sendErrorMsg(uint16_t errorcode, std::string msg, boost::asio::ip::udp::endpoint& endpoint_to_send);
+    void sendErrorMsg(uint16_t errorcode, const std::string &msg, boost::asio::ip::udp::endpoint& endpoint_to_send);
     void handleReadTimeout(boost::system::error_code err);
 
     void handleACKsent(boost::system::error_code err, std::size_t sentbytes);

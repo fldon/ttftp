@@ -34,7 +34,7 @@ public:
 private:
     void sendNextBlock();
     void checkAckForLastBlock(boost::system::error_code err, std::size_t sentbytes);
-    void sendErrorMsg(uint16_t errorcode, std::string msg, boost::asio::ip::udp::endpoint& endpoint_to_send);
+    void sendErrorMsg(error_t errorcode, std::string msg, boost::asio::ip::udp::endpoint& endpoint_to_send);
     void handleReadTimeout(boost::system::error_code err);
 
     void handleFirstAckkWithoutConnect(boost::system::error_code err, std::size_t sentbytes);
@@ -44,6 +44,7 @@ private:
     void onConnect();
 
     void endOperation(boost::system::error_code err = boost::system::error_code());
+    void endOperation(TftpUserFacingErrorCode err);
 
     std::string filename = "";
     std::size_t blocksize{0};

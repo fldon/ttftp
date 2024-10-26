@@ -53,7 +53,7 @@ void TftpServer::HandleRequest(boost::system::error_code err, std::size_t receiv
     {
         if(receivedbytes < 2)
         {
-            sendErrorMsg(TftpErrorCode::ERR_REQUSET, "Did not receive a valid opcode");
+            sendErrorMsg(TftpErrorCode::ERR_ILLEGAL_OP, "Did not receive a valid opcode");
         }
 
         RequestMessage received_msg;
@@ -61,7 +61,7 @@ void TftpServer::HandleRequest(boost::system::error_code err, std::size_t receiv
 
         if(!valid_request)
         {
-            sendErrorMsg(TftpErrorCode::ERR_REQUSET, "Did not receive a valid request message. Opcode or mode were not recognized");
+            sendErrorMsg(TftpErrorCode::ERR_ILLEGAL_OP, "Did not receive a valid request message. Opcode or mode were not recognized");
         }
 
         if(received_msg.isRRQ())

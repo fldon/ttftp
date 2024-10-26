@@ -21,6 +21,17 @@ TftpReceiver::TftpReceiver(boost::asio::ip::udp::socket &&INsocket,
     }
 }
 
+/*!
+ * \brief Ctor with the first data block already being supplied in a DataMessage. For Client option negotiation where server sends DATA 1 instead of OACK
+ * \param INsocket
+ * \param outputstream
+ * \param INmode
+ * \param remoteaddress
+ * \param port
+ * \param IN_data_1_msg
+ * \param INoperationDoneCallback
+ * \param INblocksize
+ */
 TftpReceiver::TftpReceiver(boost::asio::ip::udp::socket &&INsocket,
                            std::shared_ptr<std::ostream> outputstream,
                            TftpMode INmode,
@@ -31,36 +42,33 @@ TftpReceiver::TftpReceiver(boost::asio::ip::udp::socket &&INsocket,
                            std::size_t INblocksize)
     :TftpReceiver(std::move(INsocket), outputstream, INmode, remoteaddress, port, INoperationDoneCallback, INblocksize)
 {
-    //Write contents of data buffer into file
+    //Write contents of DATA 1 message into file
     if(!output || !(*output))
     {
-        sendErrorMsg(1, "Requested file could not be opened for output", mSenderEndpoint);
+        sendErrorMsg(static_cast<error_t>(TftpErrorCode::ERR_ACCESS_VIOLATION), "Requested file could not be opened for output", mSenderEndpoint);
         endOperation(TftpUserFacingErrorCode::ERR_OUTPUT_FILE_OPEN);
     }
     output->write(IN_data_1_msg.get_data().c_str(), IN_data_1_msg.get_data().size());
-    lastreceiveddatacount = 1; //We have already received block Nr. 1
+    lastreceiveddatacount = 1; //We have already received DATA block Nr. 1
 }
 
 void TftpReceiver::start()
 {
-    if(!output)
+    if(!output || !*output)
     {
-        sendErrorMsg(1, "Requested file could not be opened for output", mSenderEndpoint);
-        throw std::runtime_error("Output file could not be opened!");
-        endOperation();
+        sendErrorMsg(static_cast<error_t>(TftpErrorCode::ERR_ACCESS_VIOLATION), "Requested file could not be opened for output", mSenderEndpoint);
+        endOperation(TftpUserFacingErrorCode::ERR_OUTPUT_FILE_OPEN);
     }
 
+    //Server / Client op extension case: If remote connection is already established, start by sending ACK with number 0
+    if(isConnected)
     {
-        //Server case: If remote connection is already established, start by sending ACK with number 0
-        if(isConnected)
-        {
-            sendNextAck();
-        }
-        //Client case: If we are waiting for remote to send its first block as acknowledgement, skip the first ack
-        else
-        {
-            startNextReceive();
-        }
+        sendNextAck();
+    }
+    //Client basic case: If we are waiting for remote to send its first block as acknowledgement, skip the first ack
+    else
+    {
+        startNextReceive();
     }
 }
 
@@ -73,7 +81,7 @@ void TftpReceiver::checkReceivedBlock(boost::system::error_code err, std::size_t
         //We received a message on this socket from a different endpoint than our transfer peer
         if(isConnected && mLastReceivedSenderEndpoint != mSenderEndpoint)
         {
-            sendErrorMsg(5,"Remote host is not the partner of the transfer on this port", mLastReceivedSenderEndpoint);
+            sendErrorMsg(static_cast<error_t>(TftpErrorCode::ERR_UNKNOWN_TR_ID),"Remote host is not the partner of the transfer on this port", mLastReceivedSenderEndpoint);
             //For reasons of laziness, just re-send the ack as well
             sendNextAck();
         }
@@ -82,9 +90,8 @@ void TftpReceiver::checkReceivedBlock(boost::system::error_code err, std::size_t
         {
             if(sentbytes > blocksize + CONTROLBYTES)
             {
-                sendErrorMsg(1, "Received data packet blocksize is larger than agreed upon. Expected: " + std::to_string(blocksize) + ", received: " + std::to_string(sentbytes - CONTROLBYTES), mSenderEndpoint);
-                //TODO: what errorcode to set?
-                endOperation();
+                sendErrorMsg(static_cast<error_t>(TftpErrorCode::ERR_ILLEGAL_OP), "Received data packet blocksize is larger than agreed upon. Expected: " + std::to_string(blocksize) + ", received: " + std::to_string(sentbytes - CONTROLBYTES), mSenderEndpoint);
+                endOperation(TftpUserFacingErrorCode::ERR_WRONG_BLOCK);
             }
             else
             {
@@ -93,9 +100,8 @@ void TftpReceiver::checkReceivedBlock(boost::system::error_code err, std::size_t
 
                 if(!valid_msg_received)
                 {
-                    sendErrorMsg(4, "Wrong opcode: expected DATA for package" + std::to_string(lastreceiveddatacount), mSenderEndpoint);
-                    //TODO: what errorcode to set?
-                    endOperation();
+                    sendErrorMsg(static_cast<error_t>(TftpErrorCode::ERR_ILLEGAL_OP), "Wrong opcode: expected DATA for package" + std::to_string(lastreceiveddatacount), mSenderEndpoint);
+                    endOperation(TftpUserFacingErrorCode::ERR_OPCODE);
                 }
                 else
                 {
@@ -119,12 +125,11 @@ void TftpReceiver::checkReceivedBlock(boost::system::error_code err, std::size_t
                         timeoutcount = 0;
 
                         //Write contents of data buffer into file
-                        if(!(*output))
+                        if(!output || !*output)
                         {
-                            sendErrorMsg(1, "Requested file could not be opened for output", mSenderEndpoint);
+                            sendErrorMsg(static_cast<error_t>(TftpErrorCode::ERR_ACCESS_VIOLATION), "Requested file could not be opened for output", mSenderEndpoint);
                             endOperation(TftpUserFacingErrorCode::ERR_OUTPUT_FILE_OPEN);
                         }
-                        //output->write(databuffer.data() + CONTROLBYTES, sentbytes - CONTROLBYTES);
                         output->write(received_msg.get_data().c_str(), received_msg.get_data().size());
 
                         //Check number of sent bytes and end connection if it is < blocksize
@@ -139,9 +144,8 @@ void TftpReceiver::checkReceivedBlock(boost::system::error_code err, std::size_t
                     }
                     else if(dataCount > lastreceiveddatacount + 1)
                     {
-                        sendErrorMsg(4, "Data package with higher number than expected. Expected " + std::to_string(lastreceiveddatacount + 1) + ", got " + std::to_string(dataCount), mSenderEndpoint);
-                        //TODO: what errorcode to set?
-                        endOperation();
+                        sendErrorMsg(static_cast<error_t>(TftpErrorCode::ERR_ILLEGAL_OP), "Data package with higher number than expected. Expected " + std::to_string(lastreceiveddatacount + 1) + ", got " + std::to_string(dataCount), mSenderEndpoint);
+                        endOperation(TftpUserFacingErrorCode::ERR_WRONG_BLOCK);
                     }
                 }
             }
@@ -154,8 +158,7 @@ void TftpReceiver::checkReceivedBlock(boost::system::error_code err, std::size_t
     }
     else
     {
-        //unfixable error; close connection without sending further error message
-        //throw std::runtime_error("Connection error during transfer: " + err.what());
+        //unfixable socket error; close connection without sending further error message
         endOperation(err);
     }
 }
@@ -167,11 +170,7 @@ void TftpReceiver::handleReadTimeout(boost::system::error_code err)
     {
         remoteConnSocket.cancel();
         timeoutcount++;
-        if(timeoutcount <= RETRANSMISSIONS_UNTIL_TIMEOUT)
-        {
-            //sendNextAck(); //is already done in checkReceivedBlock in case of timer cancel
-        }
-        else
+        if(timeoutcount > RETRANSMISSIONS_UNTIL_TIMEOUT)
         {
             sendErrorMsg(4, "Timeout while waiting for Data Packet " + std::to_string(lastreceiveddatacount + 1), mSenderEndpoint);
             endOperation(err);
@@ -180,10 +179,8 @@ void TftpReceiver::handleReadTimeout(boost::system::error_code err)
 }
 
 
-void TftpReceiver::sendErrorMsg(uint16_t errorcode, std::string msg, boost::asio::ip::udp::endpoint& endpoint_to_send)
+void TftpReceiver::sendErrorMsg(uint16_t errorcode, const std::string &msg, boost::asio::ip::udp::endpoint& endpoint_to_send)
 {
-    //Error format: 2 bytes opcode: 05; 2 bytes errorCodem string errormessage, 1 byte end of string
-
     ErrorMessage msg_to_send;
     msg_to_send.setErrorCode(errorcode);
     msg_to_send.setErrorMsg(msg);
@@ -195,7 +192,6 @@ void TftpReceiver::sendErrorMsg(uint16_t errorcode, std::string msg, boost::asio
 
 void TftpReceiver::sendNextAck(bool lastAck)
 {
-
     lastsentack.setBlockNr(lastreceiveddatacount);
     std::shared_ptr<std::string> string_to_send = std::make_shared<std::string>(lastsentack.encode());
 
@@ -254,7 +250,6 @@ void TftpReceiver::handleFirstBlockWithoutConnect(boost::system::error_code err,
     }
     else
     {
-        //throw std::runtime_error("Error while connecting to server: " + err.what());
         endOperation(err);
     }
 }
@@ -269,7 +264,6 @@ void TftpReceiver::handleACKsent(boost::system::error_code err, std::size_t sent
 
 void TftpReceiver::onConnect()
 {
-    //remoteConnSocket.connect(mSenderEndpoint);
     mSenderEndpoint = mLastReceivedSenderEndpoint;
     isConnected = true;
 }
@@ -284,7 +278,9 @@ void TftpReceiver::endOperation(boost::system::error_code err)
         operationEnded = true;
         remoteConnSocket.close();
         if(err)
+        {
             mOperationDoneCallback(shared_from_this(), TftpUserFacingErrorCode::ERR_UNSPECIFIED);
+        }
         else
         {
             mOperationDoneCallback(shared_from_this(), TftpUserFacingErrorCode::ERR_NOERR);

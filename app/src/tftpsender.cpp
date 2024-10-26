@@ -21,11 +21,10 @@ Tftpsender::Tftpsender(boost::asio::ip::udp::socket &&IN_socket, std::shared_ptr
 
 void Tftpsender::start()
 {
-    if(!(input))
+    if(!input || !*input)
     {
-        sendErrorMsg(1, "Requested file not found", mReceiverEndpoint);
-        //TODO: what errorcode to set?
-        endOperation();
+        sendErrorMsg(static_cast<error_t>(TftpErrorCode::ERR_FILE_NOT_FOUND), "Requested file not found or insufficient permissions", mReceiverEndpoint);
+        endOperation(TftpUserFacingErrorCode::ERR_INPUT_FILE_OPEN);
     }
     else
     {
@@ -45,16 +44,15 @@ void Tftpsender::start()
 void Tftpsender::sendNextBlock()
 {
     input->seekg((lastsentdatacount - 1) * blocksize);
-    if(input)
+    if(input && *input)
     {
         lastsentdata.assign(lastsentdata.size(), 0);
         input->read(lastsentdata.data(), blocksize);
     }
     else
     {
-        sendErrorMsg(1, "Error reading from requested file. Might not exist (anymore).", mReceiverEndpoint);
-        //TODO: what errorcode to set?
-        endOperation();
+        sendErrorMsg(static_cast<error_t>(TftpErrorCode::ERR_ACCESS_VIOLATION), "Error reading from requested file. Might not exist (anymore) or insufficient permissions.", mReceiverEndpoint);
+        endOperation(TftpUserFacingErrorCode::ERR_INPUT_FILE_OPEN);
     }
     auto readbytes = input->gcount();
     DataMessage msg_to_send(readbytes);
@@ -155,7 +153,7 @@ void Tftpsender::checkAckForLastBlock(boost::system::error_code err, std::size_t
     }
 }
 
-void Tftpsender::sendErrorMsg(uint16_t errorcode, std::string msg, boost::asio::ip::udp::endpoint& endpoint_to_send)
+void Tftpsender::sendErrorMsg(error_t errorcode, std::string msg, boost::asio::ip::udp::endpoint& endpoint_to_send)
 {
     ErrorMessage msg_to_send;
     msg_to_send.setErrorCode(errorcode);
@@ -201,13 +199,11 @@ void Tftpsender::startNextReceive()
 
 void Tftpsender::handleFirstAckkWithoutConnect(boost::system::error_code err, std::size_t sentbytes)
 {
-    //onConnect();
     checkAckForLastBlock(err, sentbytes);
 }
 
 void Tftpsender::onConnect()
 {
-    //remoteConnSocket.connect(mReceiverEndpoint);
     mReceiverEndpoint = mLastReceivedReceiverEndpoint;
     isConnected = true;
 }
@@ -221,7 +217,6 @@ void Tftpsender::endOperation(boost::system::error_code err)
     {
         operationEnded = true;
         remoteConnSocket.close();
-        //TODO: disambiguate supplied error code depending on err
         if(err)
         {
             mOperationDoneCallback(shared_from_this(), TftpUserFacingErrorCode::ERR_UNSPECIFIED);
@@ -230,5 +225,15 @@ void Tftpsender::endOperation(boost::system::error_code err)
         {
             mOperationDoneCallback(shared_from_this(), TftpUserFacingErrorCode::ERR_NOERR);
         }
+    }
+}
+
+void Tftpsender::endOperation(TftpUserFacingErrorCode err)
+{
+    if(!operationEnded)
+    {
+        operationEnded = true;
+        remoteConnSocket.close();
+        mOperationDoneCallback(shared_from_this(), err);
     }
 }
