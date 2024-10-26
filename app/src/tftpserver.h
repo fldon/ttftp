@@ -11,7 +11,7 @@
 class TftpServer
 {
 public:
-    TftpServer(std::string rootfolder, boost::asio::io_context &ctx);
+    TftpServer(std::string rootfolder, boost::asio::io_context &ctx, uint16_t port = SERVER_LISTEN_PORT);
 
     void run();
 

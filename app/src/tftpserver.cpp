@@ -25,10 +25,10 @@
  * */
 
 //At creation of server, start listening on Port 69
-TftpServer::TftpServer(std::string INrootfolder, boost::asio::io_context &ctx)
+TftpServer::TftpServer(std::string INrootfolder, boost::asio::io_context &ctx, uint16_t port)
     :   mIoContext(ctx),
     mStrand(boost::asio::make_strand(mIoContext)),
-    mAccSocket(mStrand, boost::asio::ip::udp::endpoint(boost::asio::ip::udp::v4(), SERVER_LISTEN_PORT)),
+    mAccSocket(mStrand, boost::asio::ip::udp::endpoint(boost::asio::ip::udp::v4(), port)),
     rootfolder(INrootfolder)
 {
     buffer.fill(0);

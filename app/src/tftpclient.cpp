@@ -39,7 +39,7 @@ TftpClient::TftpClient(std::string INrootfolder, boost::asio::io_context &ctx)
  * \param transfermode
  * \param on_finish_callback
  */
-void TftpClient::start(boost::asio::ip::address server_address, TftpOpcode requestType, std::string filename, TransactionOptionValues IN_optionVals, TftpMode transfermode, std::function<void(TftpClient*, TftpUserFacingErrorCode)> on_finish_callback)
+void TftpClient::start(boost::asio::ip::address server_address, uint16_t IN_server_port, TftpOpcode requestType, std::string filename, TransactionOptionValues IN_optionVals, TftpMode transfermode, std::function<void(TftpClient*, TftpUserFacingErrorCode)> on_finish_callback)
 {
     mRecvBuffer.fill(0);
     if(server_address.is_unspecified())
@@ -66,7 +66,7 @@ void TftpClient::start(boost::asio::ip::address server_address, TftpOpcode reque
 
         std::string msg_string_to_send = msg_to_send.encode();
         //Send filled IObuffer
-        sock->send_to(boost::asio::buffer(msg_string_to_send, msg_string_to_send.size()), boost::asio::ip::udp::endpoint(server_address, SERVER_LISTEN_PORT));
+        sock->send_to(boost::asio::buffer(msg_string_to_send, msg_string_to_send.size()), boost::asio::ip::udp::endpoint(server_address, IN_server_port));
 
         //wait for OACK: then enable the ACKed options with the ACKed values
         if(!IN_optionVals.isDefault())
@@ -139,6 +139,8 @@ void TftpClient::start(boost::asio::ip::address server_address, TftpOpcode reque
                                          {
                                              //TODO: check for timeout error specifically
 
+                                             //TODO: check for ERROR response from peer: In that case, abort and tell client about it (see rfc 2347)
+
                                              //TODO: send error to peer if socket still valid (neither OACk nor data, so incorrect response or no response or other error)
 
                                              //give error code to client caller using callback
@@ -178,7 +180,7 @@ void TftpClient::start(boost::asio::ip::address server_address, TftpOpcode reque
         std::string msg_string_to_send = msg_to_send.encode();
 
         //Send filled IObuffer
-        sock->send_to(boost::asio::buffer(msg_string_to_send, msg_string_to_send.size()), boost::asio::ip::udp::endpoint(server_address, SERVER_LISTEN_PORT));
+        sock->send_to(boost::asio::buffer(msg_string_to_send, msg_string_to_send.size()), boost::asio::ip::udp::endpoint(server_address, IN_server_port));
 
         //wait for OACK: then enable the ACKed options with the ACKed values
         if(!IN_optionVals.isDefault())
@@ -251,6 +253,8 @@ void TftpClient::start(boost::asio::ip::address server_address, TftpOpcode reque
                                          else
                                          {
                                              //TODO: check for timeout error specifically, then return that error
+
+                                             //TODO: check for ERROR response from peer: In that case, abort and tell client about it (see rfc 2347)
 
                                              //TODO: send error to peer if socket still valid (neither OACk nor data, so incorrect response or no response or other error)
 

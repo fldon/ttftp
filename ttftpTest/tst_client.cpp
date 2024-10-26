@@ -63,7 +63,7 @@ TEST(TTFTPClient, CorrectRRQ)
     //Remove test file if it already exists
     std::remove(filename.c_str());
 
-    client.start(boost::asio::ip::make_address("127.0.0.1"), TftpOpcode::RRQ, filename);
+    client.start(boost::asio::ip::make_address("127.0.0.1"), SERVER_LISTEN_PORT, TftpOpcode::RRQ, filename);
     auto futurestatus = my_future.wait_for(15s);
     if(futurestatus == std::future_status::timeout)
     {
@@ -130,7 +130,7 @@ TEST(TTFTPClient, CorrectWRQ)
     //Remove test file if it already exists
     std::remove(filename.c_str());
 
-    client.start(boost::asio::ip::make_address("127.0.0.1"), TftpOpcode::WRQ, filename);
+    client.start(boost::asio::ip::make_address("127.0.0.1"), SERVER_LISTEN_PORT, TftpOpcode::WRQ, filename);
     auto futurestatus = my_future.wait_for(15s);
     if(futurestatus == std::future_status::timeout)
     {
@@ -199,7 +199,7 @@ TEST(TTFTPClient, CorrectResponseRRQ)
     //Remove test file if it already exists
     std::remove(filename.c_str());
 
-    client.start(boost::asio::ip::make_address("127.0.0.1"), TftpOpcode::RRQ, filename);
+    client.start(boost::asio::ip::make_address("127.0.0.1"), SERVER_LISTEN_PORT, TftpOpcode::RRQ, filename);
     std::thread t([&testIoContext] () {testIoContext.run();});
     auto futurestatus = my_future.wait_for(15s);
     if(futurestatus == std::future_status::timeout)
@@ -319,7 +319,7 @@ TEST(TTFTPClient, CorrectResponseWRQ)
     std::future<std::size_t> my_future =
         testMockServerConnSocket.async_receive_from(boost::asio::buffer(buffer, buffer.size()), clientEndpoint, boost::asio::use_future);
 
-    client.start(boost::asio::ip::make_address("127.0.0.1"), TftpOpcode::WRQ, filename);
+    client.start(boost::asio::ip::make_address("127.0.0.1"), SERVER_LISTEN_PORT, TftpOpcode::WRQ, filename);
     std::thread t([&testIoContext] () {testIoContext.run();});
     auto futurestatus = my_future.wait_for(15s);
     if(futurestatus == std::future_status::timeout)
@@ -441,7 +441,7 @@ TEST(TTFTPClient, CorrectCallbackOnFinish)
     std::future<std::size_t> my_future =
         testMockServerConnSocket.async_receive_from(boost::asio::buffer(buffer, buffer.size()), clientEndpoint, boost::asio::use_future);
 
-    client.start(boost::asio::ip::make_address("127.0.0.1"), TftpOpcode::WRQ, filename, TransactionOptionValues(), TftpMode::OCTET, [&] (TftpClient*, TftpUserFacingErrorCode ec)
+    client.start(boost::asio::ip::make_address("127.0.0.1"), SERVER_LISTEN_PORT, TftpOpcode::WRQ, filename, TransactionOptionValues(), TftpMode::OCTET, [&] (TftpClient*, TftpUserFacingErrorCode ec)
                  {
                      process_finished = true;
                      testIoContext.stop();
@@ -551,7 +551,7 @@ TEST(TTFTPClient, CorrectErrorOnInvalidOACK_RRQ_blksize)
     values_for_client.mBlocksize = 1024; //just any non-default, valid value here
 
     //Send RRQ, expect OACK from this point
-    client.start(boost::asio::ip::make_address("127.0.0.1"), TftpOpcode::RRQ, filename, values_for_client);
+    client.start(boost::asio::ip::make_address("127.0.0.1"), SERVER_LISTEN_PORT, TftpOpcode::RRQ, filename, values_for_client);
 
     std::thread t([&testIoContext] () {testIoContext.run();});
     auto futurestatus = my_future.wait_for(15s);
@@ -646,7 +646,7 @@ TEST(TTFTPClient, CorrectErrorOnInvalidOACK_WRQ_blksize)
     values_for_client.mBlocksize = 1024; //just any non-default, valid value here
 
     //Send RRQ, expect OACK from this point
-    client.start(boost::asio::ip::make_address("127.0.0.1"), TftpOpcode::WRQ, filename, values_for_client);
+    client.start(boost::asio::ip::make_address("127.0.0.1"), SERVER_LISTEN_PORT, TftpOpcode::WRQ, filename, values_for_client);
 
     std::thread t([&testIoContext] () {testIoContext.run();});
     auto futurestatus = my_future.wait_for(15s);
@@ -755,7 +755,7 @@ TEST(TTFTPClient, CorrectBlksizeNegotiationRRQ)
     values_for_client.mBlocksize = 1024; //just any non-default, valid value here
 
     //Send RRQ, expect OACK from this point
-    client.start(boost::asio::ip::make_address("127.0.0.1"), TftpOpcode::RRQ, filename, values_for_client);
+    client.start(boost::asio::ip::make_address("127.0.0.1"), SERVER_LISTEN_PORT, TftpOpcode::RRQ, filename, values_for_client);
 
     std::thread t([&testIoContext] () {testIoContext.run();});
     auto futurestatus = my_future.wait_for(15s);
@@ -866,7 +866,7 @@ TEST(TTFTPClient, CorrectBlksizeNegotiationWRQ)
     values_for_client.mBlocksize = 1024; //just any non-default, valid value here
 
     //Send RRQ, expect OACK from this point
-    client.start(boost::asio::ip::make_address("127.0.0.1"), TftpOpcode::WRQ, filename, values_for_client);
+    client.start(boost::asio::ip::make_address("127.0.0.1"), SERVER_LISTEN_PORT, TftpOpcode::WRQ, filename, values_for_client);
 
     std::thread t([&testIoContext] () {testIoContext.run();});
     auto futurestatus = my_future.wait_for(15s);
@@ -966,7 +966,7 @@ TEST(TTFTPClient, CLientRevertToDefaultWhenWrongOACK_RRQ)
     values_for_client.mBlocksize = 1024; //just any non-default, valid value here
 
     //Send RRQ, expect OACK from this point
-    client.start(boost::asio::ip::make_address("127.0.0.1"), TftpOpcode::RRQ, filename, values_for_client);
+    client.start(boost::asio::ip::make_address("127.0.0.1"), SERVER_LISTEN_PORT, TftpOpcode::RRQ, filename, values_for_client);
 
     std::thread t([&testIoContext] () {testIoContext.run();});
     auto futurestatus = my_future.wait_for(15s);
@@ -1078,7 +1078,7 @@ TEST(TTFTPClient, CLientRevertToDefaultWhenWrongOACK_WRQ)
     values_for_client.mBlocksize = 1024; //just any non-default, valid value here
 
     //Send RRQ, expect OACK from this point
-    client.start(boost::asio::ip::make_address("127.0.0.1"), TftpOpcode::WRQ, filename, values_for_client);
+    client.start(boost::asio::ip::make_address("127.0.0.1"), SERVER_LISTEN_PORT, TftpOpcode::WRQ, filename, values_for_client);
 
     std::thread t([&testIoContext] () {testIoContext.run();});
     auto futurestatus = my_future.wait_for(15s);
@@ -1180,7 +1180,7 @@ TEST(TTFTPClient, CorrectErrorWhenWRQNonExistingFileToUser)
     bool correct_error_set = false;
 
 
-    client.start(boost::asio::ip::make_address("127.0.0.1"), TftpOpcode::WRQ, filename, TransactionOptionValues(), TftpMode::OCTET, [&](TftpClient*, TftpUserFacingErrorCode err)
+    client.start(boost::asio::ip::make_address("127.0.0.1"), SERVER_LISTEN_PORT, TftpOpcode::WRQ, filename, TransactionOptionValues(), TftpMode::OCTET, [&](TftpClient*, TftpUserFacingErrorCode err)
                  {
         correct_error_set = err == TftpUserFacingErrorCode::ERR_INPUT_FILE_OPEN;
     });

@@ -75,10 +75,6 @@ TEST(TTFTPServer, ServerStartsRRQConn)
     //send request to server, check response
     testRemoteConnSocket.send_to(boost::asio::buffer(RRQmsg, RRQmsg.size()), boost::asio::ip::udp::endpoint(boost::asio::ip::udp::v4(), SERVER_LISTEN_PORT));
 
-
-
-
-
     std::array<char, 512> buffer;
     buffer.fill(0);
 
@@ -157,20 +153,13 @@ TEST(TTFTPServer, ServerStartsWRQConn)
     boost::asio::ip::udp::endpoint localsenderendpoint; //endpoint from server after request is received
 
 
-
     //start server
     TftpServer server("", testIoContext); //rootfolder is just rootfolder of test
-
-
 
     bool timeout = false;
 
     //send request to server, check response
     testRemoteConnSocket.send_to(boost::asio::buffer(RRQmsg, RRQmsg.size()), boost::asio::ip::udp::endpoint(boost::asio::ip::udp::v4(), SERVER_LISTEN_PORT));
-
-
-
-
 
     std::array<char, 512> buffer;
     buffer.fill(0);
@@ -187,11 +176,6 @@ TEST(TTFTPServer, ServerStartsWRQConn)
     }
     else
     {
-        //bool equaldata = std::equal(buffer.begin() + CONTROLBYTES, buffer.end(), ofsinput.begin());
-        //bool equalControlInfo = ntohs(*reinterpret_cast<uint16_t*>(buffer.data())) == static_cast<uint16_t>(TftpOpcode::DATA) && ntohs(*reinterpret_cast<uint16_t*>(buffer.data() + CONTROLBYTES/2)) == 1;
-        //EXPECT_EQ(equaldata, true);
-        //EXPECT_EQ(equalControlInfo, true);
-
         bool equalControlInfo = ntohs(*reinterpret_cast<uint16_t*>(buffer.data())) == static_cast<uint16_t>(TftpOpcode::ACK);
         bool equalACK = ntohs(*reinterpret_cast<uint16_t*>(buffer.data() + CONTROLBYTES/2)) == 0;
         EXPECT_EQ(equalControlInfo, true);
@@ -228,6 +212,12 @@ TEST(TTFTPServer, CorrectErrorWhenRRQForNonExistingFile)
 
 //TODO: test if the server sends a correct error response if the blksize option value is invalid (too small, too large, or not integer)
 TEST(TTFTPServer, CorrectErrorOnInvalidblksize)
+{
+    EXPECT_EQ(true, false);
+}
+
+//TODO
+TEST(TTFTPServer, CorrectCallbackCalledAtEnd)
 {
     EXPECT_EQ(true, false);
 }

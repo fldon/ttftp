@@ -2,12 +2,9 @@
 #include <map>
 #include "tftpserver.h"
 #include "tftpclient.h"
-#include <fstream>
 
 using std::string;
 using namespace std::chrono_literals;
-
-//TODO: move server and clients into separate projects
 
 //Prints a general message about usage and ends the programm
 void print_usage_msg();
@@ -47,6 +44,7 @@ void run(int argc, char* argv[])
     namedArgValues["--request="] = "";
     namedArgValues["--file="] = "";
     namedArgValues["--blksize="] = "";
+    namedArgValues["--port="] = "";
     boost::asio::ip::address serverAddress;
 
     //check all named args, IP must be last and will be checked separately
@@ -87,7 +85,7 @@ void run(int argc, char* argv[])
         }
         catch(boost::exception &e)
         {
-            std::cout << "Invalid address supplied as last argument for client!";
+            std::cerr << "Invalid address supplied as last argument for client!";
             print_usage_msg();
         }
 
@@ -101,13 +99,21 @@ void run(int argc, char* argv[])
                 int blksize = std::atoi(namedArgValues.at("--blksize=").c_str());
                 if(blksize < 8 || blksize > 65464)
                 {
-                    std::cout << "Invalid blocksize option supplied! Blocksize must be >=8 and <=65464.\n";
+                    std::cerr << "Invalid blocksize option supplied! Blocksize must be >=8 and <=65464.\n";
                     print_usage_msg();
                 }
                 client_trans_values.mBlocksize = blksize;
             }
 
+            uint16_t server_port = SERVER_LISTEN_PORT;
+            if(namedArgValues.at("--port=") != "")
+            {
+                //TODO: handle case where port= value is not numeric
+                server_port = std::atoi(namedArgValues.at("--port=").c_str());
+            }
+
             client.start(serverAddress,
+                         server_port,
                          namedArgValues.at("--request=") == "write" ? TftpOpcode::WRQ : namedArgValues.at("--request=") == "read" ? TftpOpcode::RRQ : TftpOpcode::INVALID,
                          namedArgValues.at("--file="),
                          client_trans_values,
@@ -127,24 +133,30 @@ void run(int argc, char* argv[])
                 ctx.restart();
                 operationDone.load();
             }while(!operationDone);
-            if(error != TftpUserFacingErrorCode::ERR_NOERR)
+            if(error == TftpUserFacingErrorCode::ERR_NOERR)
             {
                 std::cout << "Write/Read finished! Exiting\n";
                 //TODO: remove file if receiving and error condition
             }
             else
             {
-                std::cout << "An error occured while transferring the file: " + error_message_from_code(error) + "\nAborting.\n";
+                std::cerr << "An error occured while transferring the file: " + error_message_from_code(error) + "\nAborting.\n";
             }
         }
         catch(std::runtime_error &e)
         {
-            std::cout << "An error occured while transferring the file." << e.what() << "Aborting\n";
+            std::cerr << "An error occured while transferring the file." << e.what() << "Aborting\n";
         }
     }
     else if(namedArgValues.at("--type=") == "server")
     {
-        TftpServer server(namedArgValues.at("--root="), ctx);
+        uint16_t port = SERVER_LISTEN_PORT;
+        if(namedArgValues.at("--port=") != "")
+        {
+            //TODO: handle case where port= value is not numeric
+            port = std::atoi(namedArgValues.at("--port=").c_str());
+        }
+        TftpServer server(namedArgValues.at("--root="), ctx, port);
 
         //This call blocks until an error happens or a SIGTERM etc. arrives
         server.run();

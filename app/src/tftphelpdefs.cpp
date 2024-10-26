@@ -70,6 +70,34 @@ std::string error_message_from_code(TftpUserFacingErrorCode errorcode)
     {
         return "No error";
     }
-        //TODO: add other cases
+    case TftpUserFacingErrorCode::ERR_INPUT_FILE_OPEN:
+    {
+        return "Could not open file for input";
     }
+    case TftpUserFacingErrorCode::ERR_OUTPUT_FILE_OPEN:
+    {
+        return "Could not open file for output";
+    }
+    case TftpUserFacingErrorCode::ERR_OACK_TIMEOUT:
+    {
+        return "Timed out waiting for OACK";
+    }
+    case TftpUserFacingErrorCode::ERR_OPCODE:
+    {
+        return "Received message with wrong or unexpected opcode";
+    }
+    case TftpUserFacingErrorCode::ERR_OPT_NEGOTIATION:
+    {
+        return "Error during option negotiation";
+    }
+    case TftpUserFacingErrorCode::ERR_REQUEST:
+    {
+        return "Invalid request";
+    }
+    case TftpUserFacingErrorCode::ERR_WRONG_BLOCK:
+    {
+        return "Received wrong block during transfer";
+    }
+    }
+    return "UNHANDLED ERROR";
 }
