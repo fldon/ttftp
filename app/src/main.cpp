@@ -45,6 +45,7 @@ void run(int argc, char* argv[])
     namedArgValues["--file="] = "";
     namedArgValues["--blksize="] = "";
     namedArgValues["--port="] = "";
+    namedArgValues["--timeout="] = "";
     boost::asio::ip::address serverAddress;
 
     //check all named args, IP must be last and will be checked separately
@@ -103,6 +104,17 @@ void run(int argc, char* argv[])
                     print_usage_msg();
                 }
                 client_trans_values.mBlocksize = blksize;
+            }
+            if(namedArgValues.at("--timeout=") != "")
+            {
+                //TODO: handle case where timeout= value is not numeric
+                int timeout = std::atoi(namedArgValues.at("--timeout=").c_str());
+                if(timeout < 1 || timeout > 255)
+                {
+                    std::cerr << "Invalid timeout option supplied! Blocksize must be >=1 and <=255.\n";
+                    print_usage_msg();
+                }
+                client_trans_values.mTimeout = timeout;
             }
 
             uint16_t server_port = SERVER_LISTEN_PORT;

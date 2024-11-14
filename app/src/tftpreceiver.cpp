@@ -1,8 +1,14 @@
 #include "tftpreceiver.h"
 #include "tftphelpdefs.h"
 
-TftpReceiver::TftpReceiver(boost::asio::ip::udp::socket &&INsocket, std::shared_ptr<std::ostream> outputstream, TftpMode INmode, const boost::asio::ip::address &remoteaddress, uint16_t port, std::function<void(std::shared_ptr<TftpReceiver>, TftpUserFacingErrorCode)> INoperationDoneCallback, std::size_t INblocksize)
-    :TftpReceiver(std::move(INsocket), outputstream, INmode, INoperationDoneCallback, INblocksize)
+TftpReceiver::TftpReceiver(boost::asio::ip::udp::socket &&INsocket, std::shared_ptr<std::ostream> outputstream,
+                           TftpMode INmode,
+                           const boost::asio::ip::address &remoteaddress,
+                           uint16_t port,
+                           std::function<void(std::shared_ptr<TftpReceiver>, TftpUserFacingErrorCode)> INoperationDoneCallback,
+                           std::size_t INblocksize,
+uint8_t IN_timeout_secs)
+    :TftpReceiver(std::move(INsocket), outputstream, INmode, INoperationDoneCallback, INblocksize, IN_timeout_secs)
 {
     mLastReceivedSenderEndpoint = boost::asio::ip::udp::endpoint(remoteaddress, port);
     onConnect();
@@ -12,8 +18,15 @@ TftpReceiver::TftpReceiver(boost::asio::ip::udp::socket &&INsocket,
                            std::shared_ptr<std::ostream> outputstream,
                            TftpMode INmode,
                            std::function<void(std::shared_ptr<TftpReceiver>, TftpUserFacingErrorCode)> INoperationDoneCallback,
-                           std::size_t INblocksize)
-    :blocksize(INblocksize), remoteConnSocket(std::move(INsocket)), databuffer(blocksize + CONTROLBYTES), readTimeoutTimer(remoteConnSocket.get_executor()), mOperationDoneCallback(INoperationDoneCallback), output(outputstream)
+                           std::size_t INblocksize,
+                           uint8_t IN_timeout_secs)
+    :blocksize(INblocksize),
+    remoteConnSocket(std::move(INsocket)),
+    databuffer(blocksize + CONTROLBYTES),
+    readTimeoutTimer(remoteConnSocket.get_executor()),
+    timeout_seconds(IN_timeout_secs),
+    mOperationDoneCallback(INoperationDoneCallback),
+    output(outputstream)
 {
     if(!remoteConnSocket.is_open())
     {
@@ -39,8 +52,9 @@ TftpReceiver::TftpReceiver(boost::asio::ip::udp::socket &&INsocket,
                            uint16_t port,
                            const DataMessage &IN_data_1_msg,
                            std::function<void(std::shared_ptr<TftpReceiver>, TftpUserFacingErrorCode err)> INoperationDoneCallback,
-                           std::size_t INblocksize)
-    :TftpReceiver(std::move(INsocket), outputstream, INmode, remoteaddress, port, INoperationDoneCallback, INblocksize)
+                           std::size_t INblocksize,
+                           uint8_t IN_timeout_secs)
+    :TftpReceiver(std::move(INsocket), outputstream, INmode, remoteaddress, port, INoperationDoneCallback, INblocksize, IN_timeout_secs)
 {
     //Write contents of DATA 1 message into file
     if(!output || !(*output))
@@ -96,7 +110,7 @@ void TftpReceiver::checkReceivedBlock(boost::system::error_code err, std::size_t
             else
             {
                 DataMessage received_msg(blocksize);
-                bool valid_msg_received = received_msg.decode(std::string(databuffer.begin(), databuffer.begin() + sentbytes));
+                const bool valid_msg_received = received_msg.decode(std::string(databuffer.begin(), databuffer.begin() + sentbytes));
 
                 if(!valid_msg_received)
                 {
@@ -223,7 +237,7 @@ void TftpReceiver::sendNextAck(bool lastAck)
 void TftpReceiver::startNextReceive()
 {
     databuffer.assign(databuffer.size(), 0);
-    readTimeoutTimer.expires_from_now(boost::posix_time::seconds(RETRANSMISSION_TIME));
+    readTimeoutTimer.expires_from_now(boost::posix_time::seconds(timeout_seconds));
     readTimeoutTimer.async_wait(std::bind(&TftpReceiver::handleReadTimeout, shared_from_this(), boost::asio::placeholders::error));
     if(isConnected)
     {

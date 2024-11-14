@@ -16,25 +16,27 @@ class Tftpsender : public std::enable_shared_from_this<Tftpsender>
 public:
     //Ctor if remote endpoint is known (for server use, send Data 1 directly)
     Tftpsender(boost::asio::ip::udp::socket &&IN_socket,
-        std::shared_ptr<std::istream> IN_inputstream, TftpMode IN_mode,
-        const boost::asio::ip::address &IN_remoteaddress,
-        uint16_t IN_port,
-        int IN_firstAck,
-        std::function<void(std::shared_ptr<Tftpsender>, TftpUserFacingErrorCode)> IN_operationDoneCallback = [](std::shared_ptr<Tftpsender>, TftpUserFacingErrorCode){},
-        std::size_t IN_blocksize = DEFAULT_BLOCKSIZE);
+               std::shared_ptr<std::istream> IN_inputstream, TftpMode IN_mode,
+               const boost::asio::ip::address &IN_remoteaddress,
+               uint16_t IN_port,
+               int IN_firstAck,
+               std::function<void(std::shared_ptr<Tftpsender>, TftpUserFacingErrorCode)> IN_operationDoneCallback = [](std::shared_ptr<Tftpsender>, TftpUserFacingErrorCode){},
+               std::size_t IN_blocksize = DEFAULT_BLOCKSIZE,
+               uint8_t IN_timeout_seconds = RETRANSMISSION_TIME);
 
     //Ctor if remote endpoint is not known yet (for client use, wait for ACK 0)
     Tftpsender(boost::asio::ip::udp::socket &&IN_socket,
-        std::shared_ptr<std::istream> IN_inputstream, TftpMode IN_mode,
-        int IN_firstAck,
-        std::function<void(std::shared_ptr<Tftpsender>, TftpUserFacingErrorCode)> IN_operationDoneCallback = [](std::shared_ptr<Tftpsender>, TftpUserFacingErrorCode){},
-        std::size_t IN_blocksize = DEFAULT_BLOCKSIZE);
+               std::shared_ptr<std::istream> IN_inputstream, TftpMode IN_mode,
+               int IN_firstAck,
+               std::function<void(std::shared_ptr<Tftpsender>, TftpUserFacingErrorCode)> IN_operationDoneCallback = [](std::shared_ptr<Tftpsender>, TftpUserFacingErrorCode){},
+               std::size_t IN_blocksize = DEFAULT_BLOCKSIZE,
+               uint8_t IN_timeout_seconds = RETRANSMISSION_TIME);
 
     void start();
 private:
     void sendNextBlock();
     void checkAckForLastBlock(boost::system::error_code err, std::size_t sentbytes);
-    void sendErrorMsg(error_t errorcode, std::string msg, boost::asio::ip::udp::endpoint& endpoint_to_send);
+    void sendErrorMsg(error_t errorcode, const std::string &msg, boost::asio::ip::udp::endpoint& endpoint_to_send);
     void handleReadTimeout(boost::system::error_code err);
 
     void handleFirstAckkWithoutConnect(boost::system::error_code err, std::size_t sentbytes);
@@ -57,6 +59,7 @@ private:
 
     boost::asio::deadline_timer readTimeoutTimer;
     uint16_t timeoutcount{0};
+    uint8_t timeout_seconds = RETRANSMISSION_TIME;
 
     std::function<void(std::shared_ptr<Tftpsender>, TftpUserFacingErrorCode)> mOperationDoneCallback;
 

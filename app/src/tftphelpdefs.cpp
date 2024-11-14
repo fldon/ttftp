@@ -1,6 +1,6 @@
 #include "tftphelpdefs.h"
 
-TftpMode str2mode(std::string mode)
+TftpMode str2mode(const std::string &mode)
 {
     if(mode == "octet")
         return TftpMode::OCTET;    //TODO: Check how the mode is actually supplied over the network. Does it even make sense to make this a string??? It is probably just a byte
@@ -37,7 +37,9 @@ bool TransactionOptionValues::setOptionsFromMap(const std::map<std::string, std:
     {
         int blksize = atoi(IN_map.at("blksize").c_str());
         if(blksize >= 8 && blksize <= 65464)
+        {
             mBlocksize = blksize;
+        }
         else
         {
             //TOOD: What to do with invalid values? Throw exception? Restore default values? Return a bool?
@@ -45,6 +47,16 @@ bool TransactionOptionValues::setOptionsFromMap(const std::map<std::string, std:
         }
     }
 
+    if(IN_map.find("timeout") != IN_map.end())
+    {
+        const int timeout = atoi(IN_map.at("blksize").c_str());
+        if(timeout < 0 || timeout > 255)
+        {
+            //TOOD: What to do with invalid values? Throw exception? Restore default values? Return a bool?
+            return false;
+        }
+        mTimeout = timeout;
+    }
 
     return true;
 }

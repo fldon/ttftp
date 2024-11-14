@@ -14,7 +14,7 @@ enum class TftpUserFacingErrorCode {ERR_NOERR = 0, ERR_UNSPECIFIED = 1, ERR_OACK
 
 std::string error_message_from_code(TftpUserFacingErrorCode errorcode);
 
-[[nodiscard]] TftpMode str2mode(std::string mode);
+[[nodiscard]] TftpMode str2mode(const std::string &mode);
 [[nodiscard]] std::string mode2str(TftpMode mode);
 
 using block_nr_t = uint16_t;
@@ -43,6 +43,7 @@ struct TransactionOptionValues
     bool wasSetByClient{false};
 
     std::size_t mBlocksize{DEFAULT_BLOCKSIZE};
+    uint8_t mTimeout{RETRANSMISSION_TIME}; //Timeout time in seconds
 
 
     [[nodiscard]] std::map<std::string, std::string> getOptionsAsMap() const;

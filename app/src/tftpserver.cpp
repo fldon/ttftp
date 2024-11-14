@@ -108,6 +108,7 @@ void TftpServer::HandleSubRequest_RRQ(const RequestMessage &request)
     //if wasSetByClient in transvals is set, expect ACK 0 and send OPTACK from new socket, otherwise ACK 1 and send nothing extra
     int expected_ack = 1;
     int blocksize_to_use = DEFAULT_BLOCKSIZE;
+    uint8_t timeout_to_use = RETRANSMISSION_TIME;
     if(valuesFromClientRequest)
     {
         if(valuesFromClientRequest.value().wasSetByClient)
@@ -119,6 +120,7 @@ void TftpServer::HandleSubRequest_RRQ(const RequestMessage &request)
             newsock.send_to(boost::asio::buffer(message_to_send, message_to_send.size()), currAccEndpoint);
             expected_ack = 0;
             blocksize_to_use = valuesFromClientRequest.value().mBlocksize;
+            timeout_to_use = valuesFromClientRequest.value().mTimeout;
         }
     }
     else
@@ -129,7 +131,18 @@ void TftpServer::HandleSubRequest_RRQ(const RequestMessage &request)
 
     std::shared_ptr<std::istream> ifs(new std::ifstream(filename_to_read, std::ios_base::binary));
 
-    std::shared_ptr<Tftpsender> sender = std::make_shared<Tftpsender>(std::move(newsock), ifs, str2mode(mode), remoteaddress, remoteport, expected_ack, std::bind(static_cast<void(TftpServer::*)(std::shared_ptr<Tftpsender>, TftpUserFacingErrorCode)>(&TftpServer::handleOperationFinished), this, std::placeholders::_1, std::placeholders::_2), blocksize_to_use);
+    std::shared_ptr<Tftpsender> sender = std::make_shared<Tftpsender>(std::move(newsock),
+                                                                      ifs, str2mode(mode),
+                                                                      remoteaddress,
+                                                                      remoteport,
+                                                                      expected_ack,
+                                                                      std::bind(static_cast<void(TftpServer::*)(std::shared_ptr<Tftpsender>, TftpUserFacingErrorCode)>
+                                                                                (&TftpServer::handleOperationFinished),
+                                                                                this,
+                                                                                std::placeholders::_1,
+                                                                                std::placeholders::_2),
+                                                                      blocksize_to_use,
+                                                                      timeout_to_use);
     mSenderList.push_back(sender);
     sender->start();
 }
@@ -158,6 +171,7 @@ void TftpServer::HandleSubRequest_WRQ(const RequestMessage &request)
     //if optional is not set: that means values were not valid: send error message over the socket
     //if optional is set: give it to sender
     int blocksize_to_use = DEFAULT_BLOCKSIZE;
+    uint8_t timeout_to_use = RETRANSMISSION_TIME;
     if(valuesFromClientRequest)
     {
         if(valuesFromClientRequest.value().wasSetByClient)
@@ -168,6 +182,7 @@ void TftpServer::HandleSubRequest_WRQ(const RequestMessage &request)
             std::string message_to_send = msg_opt_ack_response.encode();
             newsock.send_to(boost::asio::buffer(message_to_send, message_to_send.size()), currAccEndpoint);
             blocksize_to_use = valuesFromClientRequest.value().mBlocksize;
+            timeout_to_use = valuesFromClientRequest.value().mTimeout;
         }
     }
     else
@@ -179,7 +194,16 @@ void TftpServer::HandleSubRequest_WRQ(const RequestMessage &request)
 
     std::shared_ptr<std::ostream> ofs(new std::ofstream(filename_to_write, std::ios_base::binary | std::ios_base::app));
 
-    std::shared_ptr<TftpReceiver> receiver = std::make_shared<TftpReceiver>(std::move(newsock), ofs, str2mode(mode), remoteaddress, remoteport, std::bind(static_cast<void(TftpServer::*)(std::shared_ptr<TftpReceiver>, TftpUserFacingErrorCode)>(&TftpServer::handleOperationFinished), this, std::placeholders::_1, std::placeholders::_2), blocksize_to_use);
+    std::shared_ptr<TftpReceiver> receiver = std::make_shared<TftpReceiver>(std::move(newsock),
+                                                                            ofs,
+                                                                            str2mode(mode),
+                                                                            remoteaddress,
+                                                                            remoteport,
+                                                                            std::bind(static_cast<void(TftpServer::*)(std::shared_ptr<TftpReceiver>,TftpUserFacingErrorCode)>
+                                                                                      (&TftpServer::handleOperationFinished),
+                                                                                      this, std::placeholders::_1, std::placeholders::_2),
+                                                                            blocksize_to_use,
+                                                                            timeout_to_use);
     mReceiverList.push_back(receiver);
     receiver->start();
 }

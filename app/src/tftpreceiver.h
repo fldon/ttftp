@@ -17,19 +17,21 @@ class TftpReceiver: public std::enable_shared_from_this<TftpReceiver>
 public:
     //Ctor if remote endpoint is known (for server use, start by sending ACK 0)
     TftpReceiver(boost::asio::ip::udp::socket &&INsocket,
-        std::shared_ptr<std::ostream> outputstream,
-        TftpMode mode,
-        const boost::asio::ip::address &remoteaddress,
-        uint16_t port,
-        std::function<void(std::shared_ptr<TftpReceiver>, TftpUserFacingErrorCode err)> OperationDoneCallback = [](std::shared_ptr<TftpReceiver>, TftpUserFacingErrorCode){},
-        std::size_t blocksize = DEFAULT_BLOCKSIZE);
+                 std::shared_ptr<std::ostream> outputstream,
+                 TftpMode mode,
+                 const boost::asio::ip::address &remoteaddress,
+                 uint16_t port,
+                 std::function<void(std::shared_ptr<TftpReceiver>, TftpUserFacingErrorCode err)> OperationDoneCallback = [](std::shared_ptr<TftpReceiver>, TftpUserFacingErrorCode){},
+                 std::size_t blocksize = DEFAULT_BLOCKSIZE,
+                 uint8_t IN_timeout_secs = RETRANSMISSION_TIME);
 
     //Ctor if remote endpoint is not known yet (for client use, start by waiting for data 1)
     TftpReceiver(boost::asio::ip::udp::socket &&INsocket,
-        std::shared_ptr<std::ostream> outputstream,
-        TftpMode mode,
-        std::function<void(std::shared_ptr<TftpReceiver>, TftpUserFacingErrorCode)> OperationDoneCallback = [](std::shared_ptr<TftpReceiver>, TftpUserFacingErrorCode){},
-        std::size_t blocksize = DEFAULT_BLOCKSIZE);
+                 std::shared_ptr<std::ostream> outputstream,
+                 TftpMode mode,
+                 std::function<void(std::shared_ptr<TftpReceiver>, TftpUserFacingErrorCode)> OperationDoneCallback = [](std::shared_ptr<TftpReceiver>, TftpUserFacingErrorCode){},
+                 std::size_t blocksize = DEFAULT_BLOCKSIZE,
+                 uint8_t IN_timeout_secs = RETRANSMISSION_TIME);
 
     //Ctor if remote endpoint is known AND data message 1 is already supplied
     TftpReceiver(boost::asio::ip::udp::socket &&INsocket,
@@ -39,7 +41,8 @@ public:
                  uint16_t port,
                  const DataMessage &IN_data_1_msg,
                  std::function<void(std::shared_ptr<TftpReceiver>, TftpUserFacingErrorCode err)> OperationDoneCallback = [](std::shared_ptr<TftpReceiver>, TftpUserFacingErrorCode){},
-                 std::size_t blocksize = DEFAULT_BLOCKSIZE);
+                 std::size_t blocksize = DEFAULT_BLOCKSIZE,
+                 uint8_t IN_timeout_secs = RETRANSMISSION_TIME);
 
     void start();
 private:
@@ -67,6 +70,7 @@ private:
 
     boost::asio::deadline_timer readTimeoutTimer;
     uint16_t timeoutcount{0};
+    uint8_t timeout_seconds = RETRANSMISSION_TIME;
 
     std::function<void(std::shared_ptr<TftpReceiver>, TftpUserFacingErrorCode)> mOperationDoneCallback;
 

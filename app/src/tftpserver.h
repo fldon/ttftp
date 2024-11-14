@@ -48,11 +48,11 @@ private:
 
     bool stop = false;
 
-    static constexpr std::size_t NUM_SUPPORTED_OPTIONS = 1;
+    static constexpr std::size_t NUM_SUPPORTED_OPTIONS = 2;
     static const std::array<std::string, NUM_SUPPORTED_OPTIONS> supported_options;
 
 };
 
-const inline std::array<std::string, TftpServer::NUM_SUPPORTED_OPTIONS> TftpServer::supported_options = {"blksize"};
+const inline std::array<std::string, TftpServer::NUM_SUPPORTED_OPTIONS> TftpServer::supported_options = {"blksize", "timeout"};
 
 #endif // TFTPSERVER_H
