@@ -36,7 +36,7 @@ private:
     boost::asio::io_context &mIoContext;
     boost::asio::strand<boost::asio::io_context::executor_type> mStrand;
 
-    std::string mRootfolder = "";
+    std::string mRootfolder;
 
     bool mTransfer_running = false;
 

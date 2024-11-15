@@ -1,5 +1,6 @@
 #include "tftpclient.h"
 #include "tftpmessages.h"
+#include <filesystem>
 #include <fstream>
 
 /*
@@ -41,6 +42,9 @@ TftpClient::TftpClient(std::string INrootfolder, boost::asio::io_context &ctx)
  */
 void TftpClient::start(boost::asio::ip::address server_address, uint16_t IN_server_port, TftpOpcode requestType, std::string filename, TransactionOptionValues IN_optionVals, TftpMode transfermode, std::function<void(TftpClient*, TftpUserFacingErrorCode)> on_finish_callback)
 {
+
+    mRootfolder = std::filesystem::absolute(mRootfolder);
+
     mRecvBuffer.fill(0);
     if(server_address.is_unspecified())
     {
@@ -56,13 +60,18 @@ void TftpClient::start(boost::asio::ip::address server_address, uint16_t IN_serv
         //shared_ptr for lifetime extension in case we need to (asynchronously) wait for OACK
         std::shared_ptr<boost::asio::ip::udp::socket> sock = std::make_shared<boost::asio::ip::udp::socket>(mStrand, boost::asio::ip::udp::v4());
 
+        const std::string filepath_to_write = mRootfolder + filename; //get full path
+
         RequestMessage msg_to_send;
         msg_to_send.setRRQ();
         msg_to_send.setFilename(filename);
         msg_to_send.setMode(transfermode);
 
         if(!IN_optionVals.isDefault())
+        {
+            IN_optionVals.mTransferSize = 0; //set tsize value to 0 for rrq
             msg_to_send.setOptVals(IN_optionVals);
+        }
 
         std::string msg_string_to_send = msg_to_send.encode();
         //Send filled IObuffer
@@ -91,17 +100,26 @@ void TftpClient::start(boost::asio::ip::address server_address, uint16_t IN_serv
                                              if(received_options.setOptionsFromMap(received_oack_msg.getOptVals()))
                                              {
 
-                                                 //if I sent options and received OACK, I DO know the remote endpoint of the server!
-                                                 // And I need to handle it differently, by first sending the ACK-0 as "ack" for the OACK
-                                                 std::string filepath_to_write = mRootfolder + filename; //get full path
+                                                 if(received_options.mTransferSize.has_value() && received_options.mTransferSize.value() > std::filesystem::space(mRootfolder).available)
+                                                 {
+                                                     //TODO: abort transfer with error code 3: we don't have enough space!
+                                                 }
+                                                 else
+                                                 {
+                                                     //if I sent options and received OACK, I DO know the remote endpoint of the server!
+                                                     // And I need to handle it differently, by first sending the ACK-0 as "ack" for the OACK
 
-                                                 std::shared_ptr<std::ostream> ofs(new std::ofstream(filepath_to_write, std::ios_base::binary));
+                                                     std::shared_ptr<std::ostream> ofs(new std::ofstream(filepath_to_write, std::ios_base::binary));
 
-                                                 //Server expects ACK 0 packet instead of us waiting for data
-                                                 std::shared_ptr<TftpReceiver> receiver = std::make_shared<TftpReceiver>(std::move(*sock), ofs, transfermode, mServerEndpoint.address(), mServerEndpoint.port(), std::bind(&TftpClient::on_receiver_done, this, std::placeholders::_1, std::placeholders::_2), received_options.mBlocksize, received_options.mTimeout);
-                                                 mTransfer_running = true;
-                                                 mTransferDoneCallback = on_finish_callback;
-                                                 receiver->start();
+                                                     const int blocksize_to_use = received_options.mBlocksize.value_or(DEFAULT_BLOCKSIZE);
+                                                     const uint8_t timeout_to_use = received_options.mTimeout.value_or(RETRANSMISSION_TIME);
+
+                                                     //Server expects ACK 0 packet instead of us waiting for data
+                                                     std::shared_ptr<TftpReceiver> receiver = std::make_shared<TftpReceiver>(std::move(*sock), ofs, transfermode, mServerEndpoint.address(), mServerEndpoint.port(), std::bind(&TftpClient::on_receiver_done, this, std::placeholders::_1, std::placeholders::_2), blocksize_to_use, timeout_to_use);
+                                                     mTransfer_running = true;
+                                                     mTransferDoneCallback = on_finish_callback;
+                                                     receiver->start();
+                                                 }
                                              }
                                              else
                                              {
@@ -125,7 +143,6 @@ void TftpClient::start(boost::asio::ip::address server_address, uint16_t IN_serv
                                                  //We ignore this data msg and expect it to be re-sent by the peer, for simplicitly
 
                                                  //Receiver is constructed without knowing remote endpoint of server - it will receive the first block as acknowledgement, or time out
-                                                 std::string filepath_to_write = mRootfolder + filename; //get full path
 
                                                  std::shared_ptr<std::ostream> ofs(new std::ofstream(filepath_to_write, std::ios_base::binary));
 
@@ -153,8 +170,6 @@ void TftpClient::start(boost::asio::ip::address server_address, uint16_t IN_serv
         else
         {
             //Receiver is constructed without knowing remote endpoint of server - it will receive the first block as acknowledgement, or time out
-            std::string filepath_to_write = mRootfolder + filename; //get full path
-
             std::shared_ptr<std::ostream> ofs(new std::ofstream(filepath_to_write, std::ios_base::binary));
 
             std::shared_ptr<TftpReceiver> receiver = std::make_shared<TftpReceiver>(std::move(*sock), ofs, transfermode, std::bind(&TftpClient::on_receiver_done, this, std::placeholders::_1, std::placeholders::_2), DEFAULT_BLOCKSIZE, RETRANSMISSION_TIME);
@@ -174,8 +189,20 @@ void TftpClient::start(boost::asio::ip::address server_address, uint16_t IN_serv
         msg_to_send.setFilename(filename);
         msg_to_send.setMode(transfermode);
 
+        const std::string filepath_to_read = mRootfolder + filename; //get full path
+
+        std::error_code ec;
+        const uintmax_t size_of_file = std::filesystem::file_size(filepath_to_read, ec);
+        if(ec)
+        {
+            //TODO: error opening file: give error to user and terminate
+        }
+
         if(!IN_optionVals.isDefault())
+        {
+            IN_optionVals.mTransferSize = size_of_file;
             msg_to_send.setOptVals(IN_optionVals);
+        }
 
         std::string msg_string_to_send = msg_to_send.encode();
 
@@ -205,17 +232,27 @@ void TftpClient::start(boost::asio::ip::address server_address, uint16_t IN_serv
                                              if( received_options.setOptionsFromMap(received_oack_msg.getOptVals()) )
                                              {
 
-                                                 //if I sent options and received OACK, I DO know the remote endpoint of the server!
-                                                 // And I need to handle it differently, by sending the first Data 1 packet, instead of waiting for ACK 0
-                                                 std::string filepath_to_read = mRootfolder + filename; //get full path
+                                                 if(received_options.mTransferSize.has_value() && received_options.mTransferSize.value() != size_of_file)
+                                                 {
+                                                     //TODO: we have received the wrong file size from the server: terminate and send error
+                                                 }
+                                                 else
+                                                 {
+                                                     //if I sent options and received OACK, I DO know the remote endpoint of the server!
+                                                     // And I need to handle it differently, by sending the first Data 1 packet, instead of waiting for ACK 0
 
-                                                 std::shared_ptr<std::istream> ifs = std::make_shared<std::ifstream>(filepath_to_read, std::ios_base::binary);
+                                                     std::shared_ptr<std::istream> ifs = std::make_shared<std::ifstream>(filepath_to_read, std::ios_base::binary);
 
-                                                 constexpr int ACK_TO_WAIT_FOR = 1;
-                                                 std::shared_ptr<Tftpsender> sender = std::make_shared<Tftpsender>(std::move(*sock), ifs, transfermode, mServerEndpoint.address(), mServerEndpoint.port(), ACK_TO_WAIT_FOR, std::bind(&TftpClient::on_sender_done, this, std::placeholders::_1, std::placeholders::_2), received_options.mBlocksize, received_options.mTimeout);
-                                                 mTransfer_running = true;
-                                                 mTransferDoneCallback = on_finish_callback;
-                                                 sender->start();
+
+                                                     const int blocksize_to_use = received_options.mBlocksize.value_or(DEFAULT_BLOCKSIZE);
+                                                     const uint8_t timeout_to_use = received_options.mTimeout.value_or(RETRANSMISSION_TIME);
+
+                                                     constexpr int ACK_TO_WAIT_FOR = 1;
+                                                     std::shared_ptr<Tftpsender> sender = std::make_shared<Tftpsender>(std::move(*sock), ifs, transfermode, mServerEndpoint.address(), mServerEndpoint.port(), ACK_TO_WAIT_FOR, std::bind(&TftpClient::on_sender_done, this, std::placeholders::_1, std::placeholders::_2), blocksize_to_use, timeout_to_use);
+                                                     mTransfer_running = true;
+                                                     mTransferDoneCallback = on_finish_callback;
+                                                     sender->start();
+                                                 }
                                              }
                                              else
                                              {
@@ -239,7 +276,6 @@ void TftpClient::start(boost::asio::ip::address server_address, uint16_t IN_serv
                                                  //We ignore this ack msg and expect it to be re-sent by the peer, for simplicitly
 
                                                  //Sender is constructed without knowing remote endpoint of server - it will send DATA 1, just like the server would when knowing the client address
-                                                 std::string filepath_to_read = mRootfolder + filename; //get full path
 
                                                  std::shared_ptr<std::istream> ifs = std::make_shared<std::ifstream>(filepath_to_read, std::ios_base::binary);
 
@@ -270,8 +306,6 @@ void TftpClient::start(boost::asio::ip::address server_address, uint16_t IN_serv
         {
 
             //Sender is constructed without knowing remote endpoint of server - it will receive the first ACK for block 0, or time out
-            std::string filepath_to_read = mRootfolder + filename; //get full path
-
             std::shared_ptr<std::istream> ifs = std::make_shared<std::ifstream>(filepath_to_read, std::ios_base::binary);
 
             constexpr int ACK_TO_WAIT_FOR = 0;

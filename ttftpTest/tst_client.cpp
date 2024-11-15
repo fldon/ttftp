@@ -5,6 +5,7 @@
 #include <cstdio>
 #include <fstream>
 #include <thread>
+#include <filesystem>
 
 using namespace testing;
 using namespace std::chrono_literals;
@@ -47,7 +48,7 @@ TEST(TTFTPClient, CorrectRRQ)
     boost::asio::ip::udp::endpoint clientEndpoint; //endpoint from client after request is received
 
 
-    TftpClient client("", testIoContext);
+    TftpClient client(std::filesystem::absolute("./"), testIoContext);
 
     bool timeout = false;
 
@@ -115,7 +116,7 @@ TEST(TTFTPClient, CorrectWRQ)
     boost::asio::ip::udp::endpoint clientEndpoint; //endpoint from client after request is received
 
 
-    TftpClient client("", testIoContext);
+    TftpClient client(std::filesystem::absolute("./"), testIoContext);
 
     bool timeout = false;
 
@@ -184,7 +185,7 @@ TEST(TTFTPClient, CorrectResponseRRQ)
     boost::asio::ip::udp::endpoint clientEndpoint; //endpoint from client after request is received
 
 
-    TftpClient client("", testIoContext);
+    TftpClient client(std::filesystem::absolute("./"), testIoContext);
 
     bool timeout = false;
 
@@ -286,7 +287,7 @@ TEST(TTFTPClient, CorrectResponseWRQ)
     boost::asio::ip::udp::endpoint clientEndpoint; //endpoint from client after request is received
 
 
-    TftpClient client("", testIoContext);
+    TftpClient client(std::filesystem::absolute("./"), testIoContext);
 
     bool timeout = false;
 
@@ -406,7 +407,7 @@ TEST(TTFTPClient, CorrectCallbackOnFinish)
     boost::asio::ip::udp::endpoint clientEndpoint; //endpoint from client after request is received
 
 
-    TftpClient client("", testIoContext);
+    TftpClient client(std::filesystem::absolute("./"), testIoContext);
 
     bool timeout = false;
 
@@ -530,7 +531,7 @@ TEST(TTFTPClient, CorrectErrorOnInvalidOACK_RRQ_blksize)
     boost::asio::ip::udp::endpoint clientEndpoint; //endpoint from client after request is received
 
 
-    TftpClient client("", testIoContext);
+    TftpClient client(std::filesystem::absolute("./"), testIoContext);
 
     bool timeout = false;
 
@@ -625,7 +626,7 @@ TEST(TTFTPClient, CorrectErrorOnInvalidOACK_WRQ_blksize)
     boost::asio::ip::udp::endpoint clientEndpoint; //endpoint from client after request is received
 
 
-    TftpClient client("", testIoContext);
+    TftpClient client(std::filesystem::absolute("./"), testIoContext);
 
     bool timeout = false;
 
@@ -734,7 +735,7 @@ TEST(TTFTPClient, CorrectBlksizeNegotiationRRQ)
     boost::asio::ip::udp::endpoint clientEndpoint; //endpoint from client after request is received
 
 
-    TftpClient client("", testIoContext);
+    TftpClient client(std::filesystem::absolute("./"), testIoContext);
 
     bool timeout = false;
 
@@ -849,7 +850,7 @@ TEST(TTFTPClient, CorrectBlksizeNegotiationWRQ)
     boost::asio::ip::udp::endpoint clientEndpoint; //endpoint from client after request is received
 
 
-    TftpClient client("", testIoContext);
+    TftpClient client(std::filesystem::absolute("./"), testIoContext);
 
     bool timeout = false;
 
@@ -945,7 +946,7 @@ TEST(TTFTPClient, CLientRevertToDefaultWhenWrongOACK_RRQ)
     boost::asio::ip::udp::endpoint clientEndpoint; //endpoint from client after request is received
 
 
-    TftpClient client("", testIoContext);
+    TftpClient client(std::filesystem::absolute("./"), testIoContext);
 
     bool timeout = false;
 
@@ -1060,7 +1061,7 @@ TEST(TTFTPClient, CLientRevertToDefaultWhenWrongOACK_WRQ)
     boost::asio::ip::udp::endpoint clientEndpoint; //endpoint from client after request is received
 
 
-    TftpClient client("", testIoContext);
+    TftpClient client(std::filesystem::absolute("./"), testIoContext);
 
     bool timeout = false;
 
@@ -1167,7 +1168,7 @@ TEST(TTFTPClient, CorrectErrorWhenWRQNonExistingFileToUser)
     boost::asio::ip::udp::endpoint clientEndpoint; //endpoint from client after request is received
 
 
-    TftpClient client("", testIoContext);
+    TftpClient client(std::filesystem::absolute("./"), testIoContext);
 
     std::array<char, 1024> buffer;
     buffer.fill(0);

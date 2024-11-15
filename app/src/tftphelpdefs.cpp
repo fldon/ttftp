@@ -26,7 +26,18 @@ std::string mode2str(TftpMode mode)
 std::map<std::string, std::string> TransactionOptionValues::getOptionsAsMap() const
 {
     std::map<std::string, std::string> ret_val;
-    ret_val["blksize"] = std::to_string(mBlocksize);
+    if(mBlocksize.has_value())
+    {
+        ret_val["blksize"] = std::to_string(mBlocksize.value());
+    }
+    if(mTimeout.has_value())
+    {
+        ret_val["timeout"] = std::to_string(mTimeout.value());
+    }
+    if(mTransferSize.has_value())
+    {
+        ret_val["tsize"] = std::to_string(mTransferSize.value());
+    }
 
     return ret_val;
 }
@@ -58,6 +69,17 @@ bool TransactionOptionValues::setOptionsFromMap(const std::map<std::string, std:
         mTimeout = timeout;
     }
 
+    if(IN_map.find("tsize") != IN_map.end())
+    {
+        const int tsize = atoi(IN_map.at("tsize").c_str());
+
+        if(tsize < 0)
+        {
+            return false;
+        }
+        mTransferSize = tsize;
+    }
+
     return true;
 }
 
@@ -67,8 +89,11 @@ bool TransactionOptionValues::setOptionsFromMap(const std::map<std::string, std:
  */
 bool TransactionOptionValues::isDefault() const
 {
-    bool isDefault = true;;
-    isDefault = isDefault && (mBlocksize == DEFAULT_BLOCKSIZE);
+    bool isDefault = true;
+
+    isDefault = (not mBlocksize.has_value()
+                   and not mTimeout.has_value()
+                 and not mTransferSize.has_value());
 
     return isDefault;
 }

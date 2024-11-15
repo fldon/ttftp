@@ -41,18 +41,18 @@ private:
     static constexpr std::size_t BUFSIZE = 2048;
     std::array<uint8_t, BUFSIZE> buffer;
 
-    std::string rootfolder = "";
+    std::string rootfolder;
 
     std::vector<std::shared_ptr<Tftpsender>> mSenderList;
     std::vector<std::shared_ptr<TftpReceiver>> mReceiverList;
 
     bool stop = false;
 
-    static constexpr std::size_t NUM_SUPPORTED_OPTIONS = 2;
+    static constexpr std::size_t NUM_SUPPORTED_OPTIONS = 3;
     static const std::array<std::string, NUM_SUPPORTED_OPTIONS> supported_options;
 
 };
 
-const inline std::array<std::string, TftpServer::NUM_SUPPORTED_OPTIONS> TftpServer::supported_options = {"blksize", "timeout"};
+const inline std::array<std::string, TftpServer::NUM_SUPPORTED_OPTIONS> TftpServer::supported_options = {"blksize", "timeout", "tsize"};
 
 #endif // TFTPSERVER_H

@@ -2,6 +2,7 @@
 #define TFTPHELPDEFS_H
 
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <map>
 
@@ -42,8 +43,9 @@ struct TransactionOptionValues
     //Only for server use
     bool wasSetByClient{false};
 
-    std::size_t mBlocksize{DEFAULT_BLOCKSIZE};
-    uint8_t mTimeout{RETRANSMISSION_TIME}; //Timeout time in seconds
+    std::optional<std::size_t> mBlocksize;
+    std::optional<uint8_t> mTimeout; //Timeout time in seconds
+    std::optional<uint64_t> mTransferSize;
 
 
     [[nodiscard]] std::map<std::string, std::string> getOptionsAsMap() const;

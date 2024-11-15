@@ -5,6 +5,7 @@
 #include "tftpserver.h"
 #include "tftphelpdefs.h"
 #include <fstream>
+#include <filesystem>
 
 using namespace testing;
 
@@ -66,7 +67,7 @@ TEST(TTFTPServer, ServerStartsRRQConn)
     boost::asio::ip::udp::endpoint localsenderendpoint; //endpoint from server after request is received
 
     //start server
-    TftpServer server("", testIoContext); //rootfolder is just rootfolder of test
+    TftpServer server(std::filesystem::absolute("./"), testIoContext); //rootfolder is just rootfolder of test
 
     std::thread t([&testIoContext] () {testIoContext.run();});
 
@@ -154,7 +155,7 @@ TEST(TTFTPServer, ServerStartsWRQConn)
 
 
     //start server
-    TftpServer server("", testIoContext); //rootfolder is just rootfolder of test
+    TftpServer server(std::filesystem::absolute("./"), testIoContext); //rootfolder is just rootfolder of test
 
     bool timeout = false;
 

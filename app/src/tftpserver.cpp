@@ -4,6 +4,7 @@
 #include "tftphelpdefs.h"
 #include <iostream>
 #include <fstream>
+#include <filesystem>
 
 /*
  * General behavior:
@@ -111,22 +112,41 @@ void TftpServer::HandleSubRequest_RRQ(const RequestMessage &request)
     uint8_t timeout_to_use = RETRANSMISSION_TIME;
     if(valuesFromClientRequest)
     {
-        if(valuesFromClientRequest.value().wasSetByClient)
+        if(valuesFromClientRequest->wasSetByClient)
         {
+            TransactionOptionValues opt_vals_to_respond = valuesFromClientRequest.value();
+
+            std::error_code ec;
+            const uintmax_t size_of_file = std::filesystem::file_size(filename_to_read, ec);
+            if(ec)
+            {
+                //TODO: error opening file: send error and terminate
+            }
+
+            if(opt_vals_to_respond.mTransferSize.has_value())
+            {
+                if(opt_vals_to_respond.mTransferSize.value() != 0)
+                {
+                    //TODO: error case: this is not a valid value from the client in RRQ! Send error and terminate
+                }
+                opt_vals_to_respond.mTransferSize = size_of_file;
+            }
+
             OptionACKMessage msg_opt_ack_response;
-            msg_opt_ack_response.setOptVals(valuesFromClientRequest->getOptionsAsMap());
+            msg_opt_ack_response.setOptVals(opt_vals_to_respond.getOptionsAsMap());
             //Then send an OPTACK (on new socket)
             std::string message_to_send = msg_opt_ack_response.encode();
             newsock.send_to(boost::asio::buffer(message_to_send, message_to_send.size()), currAccEndpoint);
             expected_ack = 0;
-            blocksize_to_use = valuesFromClientRequest.value().mBlocksize;
-            timeout_to_use = valuesFromClientRequest.value().mTimeout;
+            blocksize_to_use = valuesFromClientRequest.value().mBlocksize.value_or(DEFAULT_BLOCKSIZE);
+            timeout_to_use = valuesFromClientRequest.value().mTimeout.value_or(RETRANSMISSION_TIME);
         }
     }
     else
     {
         //send error to peer over the new socket and terminate transaction
         sendErrorMsg(TftpErrorCode::ERR_OPT_NEGOTIATION, "Option negotiation error: one of the option fields contained an invalid value");
+        //TODO: stop processing the WRQ at this point
     }
 
     std::shared_ptr<std::istream> ifs(new std::ifstream(filename_to_read, std::ios_base::binary));
@@ -172,17 +192,26 @@ void TftpServer::HandleSubRequest_WRQ(const RequestMessage &request)
     //if optional is set: give it to sender
     int blocksize_to_use = DEFAULT_BLOCKSIZE;
     uint8_t timeout_to_use = RETRANSMISSION_TIME;
+
+    //TODO: include handling for tsize option
+
     if(valuesFromClientRequest)
     {
-        if(valuesFromClientRequest.value().wasSetByClient)
+        if(valuesFromClientRequest->wasSetByClient)
         {
             OptionACKMessage msg_opt_ack_response;
             msg_opt_ack_response.setOptVals(valuesFromClientRequest->getOptionsAsMap());
+
+            if(valuesFromClientRequest->mTransferSize.has_value() && valuesFromClientRequest->mTransferSize > std::filesystem::space(rootfolder).available)
+            {
+                //TODO send error code 3 and abort: we don't have enough space for the file!
+            }
+
             //Then send an OPTACK (on new socket)
             std::string message_to_send = msg_opt_ack_response.encode();
             newsock.send_to(boost::asio::buffer(message_to_send, message_to_send.size()), currAccEndpoint);
-            blocksize_to_use = valuesFromClientRequest.value().mBlocksize;
-            timeout_to_use = valuesFromClientRequest.value().mTimeout;
+            blocksize_to_use = valuesFromClientRequest.value().mBlocksize.value_or(DEFAULT_BLOCKSIZE);
+            timeout_to_use = valuesFromClientRequest.value().mTimeout.value_or(RETRANSMISSION_TIME);
         }
     }
     else
@@ -190,6 +219,7 @@ void TftpServer::HandleSubRequest_WRQ(const RequestMessage &request)
         //send error to peer over the new socket and terminate transaction
         //TODO: somehow change the parseOptionFields fct. and etc. to return a concrete issue that we can send
         sendErrorMsg(TftpErrorCode::ERR_OPT_NEGOTIATION, "Option negotiation error: one of the option fields contained an invalid value");
+        //TODO: stop processing the WRQ at this point
     }
 
     std::shared_ptr<std::ostream> ofs(new std::ofstream(filename_to_write, std::ios_base::binary | std::ios_base::app));

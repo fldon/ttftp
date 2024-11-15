@@ -1,5 +1,6 @@
 #include <iostream>
 #include <map>
+#include <filesystem>
 #include "tftpserver.h"
 #include "tftpclient.h"
 
@@ -39,7 +40,7 @@ void run(int argc, char* argv[])
 
     std::map<string, string> namedArgValues;
 
-    namedArgValues["--root="] = "";
+    namedArgValues["--root="] = std::filesystem::absolute("./");
     namedArgValues["--type="] = "";
     namedArgValues["--request="] = "";
     namedArgValues["--file="] = "";
