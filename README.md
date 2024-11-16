@@ -2,7 +2,7 @@
 simple trivial file transfer protocol server and client combo.
 For usage info, simply run the binary without parameters.
 
-Implements the following RFCs:
+## Implements the following RFCs:
 
 1350 (currently without netascii and mail modes)
 
@@ -10,12 +10,9 @@ Implements the following RFCs:
 
 2348
 
+2349
 
-TODO:
-
-RFC 2349
-
-Build instructions:
+## Build instructions:
 
 Build using the top level ttftp.qbs project file.
 
