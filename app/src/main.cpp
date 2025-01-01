@@ -8,9 +8,9 @@ using std::string;
 using namespace std::chrono_literals;
 
 //Prints a general message about usage and ends the programm
-void print_usage_msg();
+static void print_usage_msg();
 
-void run(int argc, char* argv[]);
+static void run(int argc, char* argv[]);
 
 //TODO: include mode (currently only octet mode so no point)
 /*
