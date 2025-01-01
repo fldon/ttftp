@@ -3,10 +3,7 @@ Project
 {
     name: "TTFTP"
     references: [
-        "app/app.qbs"
+        "app/app.qbs",
+        "ttftpTest/ttftpTest.qbs"
     ]
-
-SubProject {
-        filePath: "ttftpTest/ttftpTest.qbs"
-}
 }
